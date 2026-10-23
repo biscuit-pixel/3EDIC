@@ -57,13 +57,9 @@ The first start shows a setup screen that downloads the models (about 145 MB, re
 
 ## Releasing a new version
 
-Releases are built by GitHub Actions; nobody builds an installer by hand.
+Releases are built and published by GitHub Actions; nobody builds or uploads an installer by hand. The result appears on the repository's **Releases** page (`github.com/<owner>/3EDIC/releases`), and that is where users and the in-app updater get it.
 
-```bash
-git tag v0.2.0 && git push origin v0.2.0
-```
-
-That runs `.github/workflows/release.yml`: it runs the tests, builds the app with PyInstaller on Windows, macOS (Apple silicon) and macOS (Intel), starts each built app headlessly and runs it through the whole vision pipeline (`--smoke --with-models`), builds the Windows installer (Inno Setup) and the `.dmg` files, installs and uninstalls the Windows installer silently as a final check, then publishes a GitHub release with the files and `SHA256SUMS.txt`. A tag with a dash (`v0.2.0-beta1`) is published as a pre-release. *Actions → Release → Run workflow* does a full test build without publishing.
+**Without a terminal:** GitHub → *Actions* → *Release* → *Run workflow* → type the version (`0.2.0`), tick **Publish a GitHub release**, run. **With a terminal:** `git tag v0.2.0 && git push origin v0.2.0`. Either way the workflow runs the tests, builds the app with PyInstaller on Windows, macOS (Apple silicon) and macOS (Intel), starts each built app headlessly and runs it through the whole vision pipeline (`--smoke --with-models`), builds the Windows installer (Inno Setup) and the `.dmg` files, installs and uninstalls the Windows installer silently as a final check, then creates the release with the files and `SHA256SUMS.txt`. Takes about 20 minutes. A version with a dash (`0.2.0-beta1`) is published as a pre-release. Running the workflow without ticking *Publish* (or with the default `0.0.0.dev0`) does a full test build and publishes nothing.
 
 `.github/workflows/ci.yml` runs the tests on Linux, Windows and macOS for every push and pull request.
 

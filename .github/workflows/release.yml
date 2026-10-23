@@ -10,8 +10,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version for a test build (test builds are never published)"
+        description: "Version number, e.g. 0.1.0 (a 0.0.0.dev0 test build is never published)"
         default: "0.0.0.dev0"
+      publish:
+        description: "Publish a GitHub release with the installers (creates the tag v<version>)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -166,7 +170,7 @@ jobs:
   publish:
     name: Publish the release
     needs: build
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || github.event.inputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -179,12 +183,22 @@ jobs:
           merge-multiple: true
       - name: Checksums
         run: cd artifacts && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
-      - name: Create the release
+      - name: Create the release (or add the files to it if it already exists)
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          FLAGS=""
-          case "$GITHUB_REF_NAME" in *-*) FLAGS="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" artifacts/* $FLAGS \
-            --title "3EDIČ ${GITHUB_REF_NAME#v}" \
-            --notes-file packaging/RELEASE_NOTES.md --generate-notes --verify-tag
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"; TARGET=(--verify-tag)
+          else
+            case "$INPUT_VERSION" in *dev*|"") echo "A dev/test version is never published"; exit 1 ;; esac
+            TAG="v${INPUT_VERSION#v}"; TARGET=(--target "$GITHUB_SHA")
+          fi
+          FLAGS=()
+          case "$TAG" in *-*) FLAGS+=(--prerelease) ;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            gh release create "$TAG" artifacts/* "${FLAGS[@]}" "${TARGET[@]}" \
+              --title "3EDIČ ${TAG#v}" --notes-file packaging/RELEASE_NOTES.md --generate-notes
+          fi
