@@ -3,6 +3,7 @@ Run: pytest -q tests/test_engine.py
 """
 import csv
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -149,7 +150,7 @@ def test_batches_and_resolve(project):
     assert all(states[i] == "accepted" for i in ok_ids) and states[bad_ids[0]] == "rejected"
 
 
-@pytest.mark.parametrize("mode", ["copy", "hardlink", "symlink"])
+@pytest.mark.parametrize("mode", ["copy", "hardlink", pytest.param("symlink", marks=pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows"))])
 def test_export_writes_folders_report_and_handles_name_clashes(project, tmp_path, mode):
     project.rescore("basic")
     rv = Review(project)
@@ -201,3 +202,36 @@ def test_calibration_profile_needs_two_examples_and_roundtrips(project):
     with pytest.raises(ValueError):
         project.add_bib_example(ph, None, [5.0, 5.0, 9.0, 9.0])      # nobody near that spot
     assert any(r["status"] == "accepted" for r in project.con.execute("SELECT status FROM assignments WHERE photo_id=?", (ph,)))
+
+
+def test_gpu_provider_failure_falls_back_to_cpu(tmp_path, monkeypatch):
+    """A GPU provider that cannot start must not take the app down."""
+    import onnx
+    from onnx import TensorProto, helper
+    from edic.vision import providers
+    node = helper.make_node("Identity", ["x"], ["y"])
+    graph = helper.make_graph([node], "g", [helper.make_tensor_value_info("x", TensorProto.FLOAT, [1])],
+                              [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1])])
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)])
+    model.ir_version = 8
+    path = tmp_path / "id.onnx"
+    onnx.save(model, path)
+    real, tried = providers.ort.InferenceSession, []
+
+    def flaky(p, sess_options=None, providers=None):          # the GPU provider "fails to start" (driver, no DirectX 12, VM...)
+        tried.append(list(providers))
+        if providers[0] != "CPUExecutionProvider":
+            raise RuntimeError("no device")
+        return real(p, sess_options=sess_options, providers=providers)
+
+    monkeypatch.setattr(providers, "providers", lambda force_cpu=False: ["DmlExecutionProvider", "CPUExecutionProvider"])
+    monkeypatch.setattr(providers.ort, "InferenceSession", flaky)
+    sess = providers.session(path)
+    assert tried == [["DmlExecutionProvider", "CPUExecutionProvider"], ["CPUExecutionProvider"]]   # tried the GPU, then the CPU
+    assert sess.run(None, {"x": np.array([3.0], np.float32)})[0][0] == 3.0
+
+    tried.clear()                                             # a CPU-only failure is a real error and must surface
+    monkeypatch.setattr(providers, "providers", lambda force_cpu=False: ["CPUExecutionProvider"])
+    monkeypatch.setattr(providers.ort, "InferenceSession", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("corrupt model")))
+    with pytest.raises(RuntimeError, match="corrupt"):
+        providers.session(path)

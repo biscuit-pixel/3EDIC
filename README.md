@@ -32,7 +32,11 @@ Optional: send small crops of the hip area (never faces, never whole photos) to 
 
 Reading these honestly: roughly half of the correct assignments happen with no human, about 90 % of them right; the rest go to review. In most photos taken from behind or from the side the number is simply not visible, so no local model can read it. The combiner weights were fitted on this same event (cross-fitted numbers are shown; in-sample is within 1 point). A different event may behave differently.
 
-## Install and run
+## Install
+
+**Windows and macOS: use the installers** from the [Releases](../../releases) page: `3EDIC-Setup-x.y.z.exe` (Windows 10/11, per-user, no administrator rights) or the `.dmg` for your Mac (`arm64` for Apple silicon, `x86_64` for Intel). The installers are not code-signed yet, so Windows SmartScreen and macOS Gatekeeper will ask you to confirm once (see the release notes). The Windows build uses DirectML, so NVIDIA, AMD and Intel graphics cards are used automatically.
+
+### From source
 
 Requires Python 3.10+.
 
@@ -48,6 +52,24 @@ pip uninstall onnxruntime && pip install onnxruntime-directml
 ```
 
 The first start shows a setup screen that downloads the models (about 145 MB, resumable, checksum-verified). Project data and models live in the user data directory (`~/.local/share/3edic`, `~/Library/Application Support/3EDIC`, `%APPDATA%\3EDIC`); override with `edic --data-dir PATH`.
+
+## Releasing a new version
+
+Releases are built by GitHub Actions; nobody builds an installer by hand.
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+That runs `.github/workflows/release.yml`: it runs the tests, builds the app with PyInstaller on Windows, macOS (Apple silicon) and macOS (Intel), starts each built app headlessly and runs it through the whole vision pipeline (`--smoke --with-models`), builds the Windows installer (Inno Setup) and the `.dmg` files, installs and uninstalls the Windows installer silently as a final check, then publishes a GitHub release with the files and `SHA256SUMS.txt`. A tag with a dash (`v0.2.0-beta1`) is published as a pre-release. *Actions → Release → Run workflow* does a full test build without publishing.
+
+`.github/workflows/ci.yml` runs the tests on Linux, Windows and macOS for every push and pull request.
+
+To change the app icon, replace `packaging/icon-1024.png`; everything else is generated. Code signing is optional and switches on by itself when these repository secrets exist: `WINDOWS_CERT_BASE64` + `WINDOWS_CERT_PASSWORD` (a code-signing certificate as .pfx), and `APPLE_CERT_BASE64`, `APPLE_CERT_PASSWORD`, `APPLE_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` (Developer ID certificate and notarization). Those steps have not been run yet.
+
+## Group photos
+
+A photo with several competitors is written into the folder of **every** competitor it is assigned to (copy, hard link or shortcut). Which competitors count is the *Which photos go in* setting on the Export tab: **Smart** (confirmed plus very likely), **Readable numbers** (only where a number was read on that photo), **Everyone plausible**, or **Only my decisions**. In *Review → Groups* you click each person on the photo and say who they are, which is the most exact way.
 
 ## Models
 

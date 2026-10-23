@@ -1,0 +1,192 @@
+name: Release
+
+# Push a tag like v0.2.0 and this builds the Windows installer and the macOS disk images, smoke-tests each one
+# (the installed app is started and run through the whole vision pipeline), then publishes a GitHub release.
+# "Run workflow" from the Actions tab builds everything the same way but never publishes.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version for a test build (test builds are never published)"
+        default: "0.0.0-test"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64 }
+          - { os: macos-14, name: macos-arm64 }
+          - { os: macos-15-intel, name: macos-x64 }
+    env:
+      # Optional code signing. Without these secrets the installers are unsigned (users see a SmartScreen / Gatekeeper warning).
+      WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
+      APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+      APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set the version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="${INPUT_VERSION:-0.0.0-test}"; fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          python packaging/set_version.py "$V"
+
+      - name: Install
+        shell: bash
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[desktop,build]"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # GPU build of ONNX Runtime: DirectML works on NVIDIA, AMD and Intel cards without installing CUDA
+            pip uninstall -y onnxruntime
+            pip install onnxruntime-directml
+          fi
+          python -c "import onnxruntime as o; print('onnxruntime', o.__version__, o.get_available_providers())"
+
+      - name: Tests
+        shell: bash
+        run: |
+          pip install pytest
+          pytest -q
+
+      - name: Icons
+        run: python packaging/make_icons.py
+
+      - name: Build the app
+        run: pyinstaller packaging/3edic.spec --noconfirm
+
+      - name: Smoke test the built app (downloads the models and runs the vision pipeline)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            dist/3EDIC/3EDIC-console.exe --smoke --with-models
+          else
+            dist/3EDIC.app/Contents/MacOS/3EDIC --smoke --with-models
+          fi
+
+      # ---------------------------------------------------------------- Windows
+      - name: Build the Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile packaging/windows/MicrosoftEdgeWebview2Setup.exe
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=$env:VERSION" packaging\windows\3edic.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+
+      - name: Sign the installer (only when a certificate is configured)
+        if: runner.os == 'Windows' && env.WINDOWS_CERT_BASE64 != ''
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
+          $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1).FullName
+          & $signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 (Get-ChildItem dist\installers\3EDIC-Setup-*.exe).FullName
+          Remove-Item "$env:RUNNER_TEMP\cert.pfx"
+
+      - name: Install it silently and smoke-test the installed copy
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem dist\installers\3EDIC-Setup-*.exe | Select-Object -First 1).FullName
+          $dir = "$env:RUNNER_TEMP\3edic-installed"
+          Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$dir","/LOG=$env:RUNNER_TEMP\setup.log" -Wait
+          if (-not (Test-Path "$dir\3EDIC.exe")) { Get-Content "$env:RUNNER_TEMP\setup.log" -Tail 40; throw "the installer did not install the app" }
+          & "$dir\3EDIC-console.exe" --smoke
+          if ($LASTEXITCODE -ne 0) { throw "the installed app failed its smoke test" }
+          Start-Process -FilePath "$dir\unins000.exe" -ArgumentList "/VERYSILENT" -Wait
+          if (Test-Path "$dir\3EDIC.exe") { throw "the uninstaller left the app behind" }
+
+      # ------------------------------------------------------------------ macOS
+      - name: Sign the app (only when a Developer ID certificate is configured)
+        if: runner.os == 'macOS' && env.APPLE_CERT_BASE64 != ''
+        shell: bash
+        run: |
+          echo "$APPLE_CERT_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p ci "$RUNNER_TEMP/ci.keychain"
+          security set-keychain-settings -lut 3600 "$RUNNER_TEMP/ci.keychain"
+          security unlock-keychain -p ci "$RUNNER_TEMP/ci.keychain"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/ci.keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k ci "$RUNNER_TEMP/ci.keychain"
+          security list-keychains -d user -s "$RUNNER_TEMP/ci.keychain" login.keychain
+          codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGN_IDENTITY" dist/3EDIC.app
+          codesign --verify --deep --strict dist/3EDIC.app
+
+      - name: Build the disk image
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ARCH="$(uname -m)"
+          mkdir -p dist/installers
+          bash packaging/macos/make_dmg.sh dist/3EDIC.app "dist/installers/3EDIC-${VERSION}-macos-${ARCH}.dmg"
+
+      - name: Notarize (only when Apple credentials are configured)
+        if: runner.os == 'macOS' && env.APPLE_ID != '' && env.APPLE_CERT_BASE64 != ''
+        shell: bash
+        run: |
+          DMG="$(ls dist/installers/*.dmg | head -n1)"
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$DMG"
+
+      - name: Smoke test the app inside the disk image
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          DMG="$(ls dist/installers/*.dmg | head -n1)"
+          hdiutil attach "$DMG" -mountpoint "$RUNNER_TEMP/edic-dmg" -nobrowse -quiet
+          "$RUNNER_TEMP/edic-dmg/3EDIC.app/Contents/MacOS/3EDIC" --smoke
+          hdiutil detach "$RUNNER_TEMP/edic-dmg" -quiet
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.name }}
+          path: dist/installers/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: installer-*
+          merge-multiple: true
+      - name: Checksums
+        run: cd artifacts && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FLAGS=""
+          case "$GITHUB_REF_NAME" in *-*) FLAGS="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" artifacts/* $FLAGS \
+            --title "3EDIČ ${GITHUB_REF_NAME#v}" \
+            --notes-file packaging/RELEASE_NOTES.md --generate-notes --verify-tag

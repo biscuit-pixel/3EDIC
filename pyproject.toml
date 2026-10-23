@@ -4,25 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edic"
-version = "0.1.0"
+dynamic = ["version"]
 description = "3EDIČ — sort event photos by competitor number, face and shooting order"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
   "numpy", "opencv-python-headless", "onnxruntime", "rapidocr-onnxruntime", "pillow", "httpx",
-  "fastapi", "uvicorn[standard]", "python-multipart", "scikit-learn",
+  "fastapi", "uvicorn[standard]", "python-multipart",
 ]
 
 [project.optional-dependencies]
 windows-gpu = ["onnxruntime-directml"]      # replaces onnxruntime: NVIDIA / AMD / Intel GPUs without installing CUDA
 dev = ["pytest"]
+research = ["scikit-learn"]                 # only needed to refit the default combiner weights (tools/fit_combiner.py)
+desktop = ["pywebview"]                     # native window for the installers
+build = ["pyinstaller", "pillow"]
 
 [project.scripts]
 edic = "edic.__main__:main"
+
+[project.gui-scripts]
+edic-desktop = "edic.desktop:main"
 
 [tool.setuptools.packages.find]
 include = ["edic*"]
 
 [tool.setuptools.package-data]
 edic = ["data/*.json", "models/*.json", "ui/**/*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "edic.__version__" }

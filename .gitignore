@@ -7,3 +7,7 @@ dist/
 .venv/
 *.onnx
 *.part
+*.exe
+*.dmg
+packaging/build/
+dist/
