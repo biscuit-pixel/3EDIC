@@ -171,3 +171,16 @@ def test_mac_swaps_the_app_in_place_or_falls_back_to_the_disk_image(tmp_path, mo
     assert "kill -0" in script and 'hdiutil attach' in script and 'mv "$APP.new" "$APP"' in script
     monkeypatch.setattr(U, "current_app_bundle", lambda: None)
     assert up.apply(tmp_path / "x.dmg", dry_run=True)[0] == "open"
+
+
+@pytest.mark.parametrize("plat,machine", [("win32", "AMD64"), ("darwin", "arm64"), ("darwin", "x86_64"), ("darwin", "aarch64")])
+@pytest.mark.parametrize("version", ["0.1.0", "1.20.3", "0.2.0-beta1", "0.0.0.dev0"])
+def test_every_file_name_the_build_produces_passes_the_safety_filter(plat, machine, version):
+    """Regression: the Intel Mac name contains an underscore and was refused by the filter."""
+    name = U.asset_name_for(version, plat, machine)
+    assert name and U.ASSET_RE.match(name), name
+
+
+def test_safety_filter_still_blocks_path_tricks():
+    for bad in ("../3EDIC-Setup-1.0.0.exe", "3EDIC-Setup-1.0.0.exe/../x", "3EDIC/../x.exe", "evil.exe", "3EDIC-x.sh", "3EDIC- x.exe", "3EDIC-a\\b.exe"):
+        assert not U.ASSET_RE.match(bad), bad

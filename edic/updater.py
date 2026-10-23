@@ -30,7 +30,7 @@ GITHUB_REPO = "biscuit-pixel/3EDIC"
 CHECK_EVERY = 6 * 3600                       # seconds between automatic checks
 MAX_DOWNLOAD = 1_500_000_000                 # refuse anything bigger than 1.5 GB
 ALLOWED_HOSTS = ("github.com", "api.github.com", "githubusercontent.com")      # also matches *.githubusercontent.com
-ASSET_RE = re.compile(r"^3EDIC-[0-9A-Za-z.+\-]+\.(exe|dmg)$")
+ASSET_RE = re.compile(r"^3EDIC-[0-9A-Za-z._+\-]+\.(exe|dmg)$")      # underscores: macos-x86_64
 
 
 class UpdateError(RuntimeError):
