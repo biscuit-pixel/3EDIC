@@ -1,3 +1,5 @@
+<p align="center"><img src="branding/logo/3edic-logo.svg" alt="3EDIČ" width="420"></p>
+
 # 3EDIČ
 
 Sort event photos by competitor number, face and shooting order — on your own computer.
@@ -64,6 +66,12 @@ git tag v0.2.0 && git push origin v0.2.0
 That runs `.github/workflows/release.yml`: it runs the tests, builds the app with PyInstaller on Windows, macOS (Apple silicon) and macOS (Intel), starts each built app headlessly and runs it through the whole vision pipeline (`--smoke --with-models`), builds the Windows installer (Inno Setup) and the `.dmg` files, installs and uninstalls the Windows installer silently as a final check, then publishes a GitHub release with the files and `SHA256SUMS.txt`. A tag with a dash (`v0.2.0-beta1`) is published as a pre-release. *Actions → Release → Run workflow* does a full test build without publishing.
 
 `.github/workflows/ci.yml` runs the tests on Linux, Windows and macOS for every push and pull request.
+
+### How installed apps get the update
+
+You do nothing beyond pushing the tag. Every installed app asks GitHub for the latest release when it starts and every six hours, and shows a banner ("Update 0.2.0 is ready": release notes, **Update now**, **Later**). *Update now* downloads the installer for that computer, checks its SHA-256 against the release's `SHA256SUMS.txt`, then closes the app, installs and reopens it: on Windows the installer runs silently, on macOS a small script swaps the app in place (if the app sits somewhere it cannot change, it opens the disk image instead). Pre-releases (`v0.2.0-beta1`) are never offered. Users can switch the automatic check off in Settings; a check sends nothing but the request itself to GitHub.
+
+Updates only ever come from this project's GitHub releases, over HTTPS, and are checked against the checksum file the same release publishes, so the update path is only as safe as the GitHub account: keep two-factor authentication on. Code signing (Windows certificate, Apple notarization) is the next layer, see `TODO.md`. The release notes are the GitHub release text, so write them for users.
 
 To change the app icon, replace `packaging/icon-1024.png`; everything else is generated. Code signing is optional and switches on by itself when these repository secrets exist: `WINDOWS_CERT_BASE64` + `WINDOWS_CERT_PASSWORD` (a code-signing certificate as .pfx), and `APPLE_CERT_BASE64`, `APPLE_CERT_PASSWORD`, `APPLE_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` (Developer ID certificate and notarization). Those steps have not been run yet.
 

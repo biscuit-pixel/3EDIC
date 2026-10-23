@@ -6,6 +6,38 @@ import { renderEvent } from './event.js';
 export const S = { system: null };
 const view = () => $('#view');
 
+// ----------------------------------------------------------------- updates
+async function updateBanner(force = false) {
+  try { S.update = await api.get('/api/update' + (force ? '?force=true' : '')); } catch { return null; }
+  drawBanner();
+  return S.update;
+}
+
+function drawBanner() {
+  const box = $('#banner');
+  if (!box) return;
+  clear(box);
+  const u = S.update;
+  if (!u || !u.available || u.dismissed) return;
+  const bar = DotBar({ n: 40 }); bar.classList.add('fill', 'hidden');
+  const msg = h('div', { class: 'data subtle' });
+  const notes = Key(t('update.whatsnew'), { h: 40, onclick: () => modal({ title: t('update.ready', { v: u.latest }), wide: true, body: h('pre', { class: 'notes' }, u.notes || t('update.notes.none')) }) });
+  const later = Key(t('update.later'), { h: 40, onclick: async () => { await api.put('/api/settings', { update_dismissed: u.latest }); u.dismissed = true; drawBanner(); } });
+  const now = Key(u.can_install ? t('update.now') : t('update.download'), { primary: true, h: 40, onclick: async () => {
+    if (!u.can_install) return api.post('/api/open-release-page');
+    now.disabled = later.disabled = true; bar.classList.remove('hidden'); msg.classList.remove('err');
+    try {
+      const job = await api.post('/api/update/install');
+      msg.textContent = t('update.downloading');
+      const done = await watchJob(job, (j) => { bar.set(j.total ? j.done / j.total : 0); });
+      msg.textContent = done.result?.restarting ? t('update.restarting') : t('common.done');
+    } catch (e) { msg.textContent = t('update.failed', { e: e.message }); msg.classList.add('err'); now.disabled = later.disabled = false; }
+  } });
+  box.append(h('div', { class: 'update-bar' }, h('div', { class: 'panel raised' }, h('div', { class: 'panel-in stack' },
+    h('div', { class: 'row wrap' }, Tag(t('update.new'), { kind: 'live' }), h('div', { class: 'title grow' }, t('update.ready', { v: u.latest })), notes, later, now),
+    u.can_install ? null : h('div', { class: 'data subtle' }, t('update.manual.' + (u.reason || 'no_asset'))), bar, msg))));
+}
+
 // ---------------------------------------------------------------- routing
 function route() {
   const parts = (location.hash.replace(/^#\/?/, '') || '').split('/').filter(Boolean);
@@ -25,6 +57,7 @@ async function render() {
     if (!S.system) await refreshSystem();
     if (!S.system.ready && r.name !== 'setup') return go('setup');
     shell(r);
+    if (S.update) drawBanner(); else updateBanner();
     const v = view();
     clear(v);
     if (r.name === 'setup') v.append(await setupView());
@@ -47,7 +80,7 @@ function shell(r) {
     root.append(
       h('div', { class: 'dotfield' }),
       h('header', { class: 'top' },
-        h('button', { class: 'wm', type: 'button', onclick: () => go(''), 'aria-label': '3EDIČ' }, '3EDIČ'),
+        h('button', { class: 'wm', type: 'button', onclick: () => go(''), 'aria-label': '3EDIČ' }, h('img', { src: '/brand/logo.svg', alt: '3EDIČ' })),
         S.system.ready && h('nav', null,
           Tag(t('nav.events'), { onclick: () => go(''), pressed: r.name === 'home' || r.name === 'e' }),
           Tag(t('nav.settings'), { onclick: () => go('settings'), pressed: r.name === 'settings' })),
@@ -55,6 +88,7 @@ function shell(r) {
         h('div', { class: 'right' },
           Tag(hw.accelerated ? hw.device : 'CPU', { kind: hw.accelerated ? 'cobalt' : 'muted', title: hw.providers.join(', ') }),
           ['en', 'sk'].map((l) => Tag(l.toUpperCase(), { pressed: getLang() === l, onclick: () => changeLang(l) })))),
+      h('div', { id: 'banner' }),
       h('main', { id: 'view' }));
   }
 }
@@ -75,7 +109,7 @@ async function homeView() {
     ? h('div', { class: 'cols c3' }, projects.map((p) => projectCard(p)))
     : h('div', { class: 'empty' }, h('p', { class: 'body-l muted' }, t('home.empty')));
   return h('div', null,
-    h('section', { class: 'hero' }, h('h1', { class: 'display-xl' }, '3EDIČ'), h('p', { class: 'body-l muted' }, t('app.tagline')), h('div', null, newKey)),
+    h('section', { class: 'hero' }, h('h1', { class: 'hero-logo' }, h('img', { src: '/brand/logo.svg', alt: '3EDIČ' })), h('p', { class: 'body-l muted' }, t('app.tagline')), h('div', null, newKey)),
     list);
 }
 
@@ -214,7 +248,7 @@ async function settingsView() {
   const drawProv = () => {
     clear(provRow);
     provRow.append(Tag(t('settings.ai.off'), { pressed: !s.vlm_provider, onclick: async () => { s.vlm_provider = null; await api.put('/api/settings', { vlm_provider: null }); drawProv(); } }),
-      providers.map((p) => Tag(labels[p] || p, { pressed: s.vlm_provider === p, onclick: async () => { s.vlm_provider = p; await api.put('/api/settings', { vlm_provider: p }); drawProv(); } })));
+      ...providers.map((p) => Tag(labels[p] || p, { pressed: s.vlm_provider === p, onclick: async () => { s.vlm_provider = p; await api.put('/api/settings', { vlm_provider: p }); drawProv(); } })));
     clear(keyBox);
     if (!s.vlm_provider) return;
     const p = s.vlm_provider;
@@ -230,6 +264,17 @@ async function settingsView() {
   };
   drawProv();
 
+  const upStatus = h('div', { class: 'data subtle' });
+  const upPanel = h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('settings.updates')),
+    h('div', { class: 'kv' }, h('span', null, t('settings.version')), h('span', { class: 'data' }, sys.version)),
+    Orbit({ checked: s.check_updates, on: t('common.on'), off: t('common.off'), label: t('settings.updates.auto'), onchange: async (v) => { s.check_updates = v; await api.put('/api/settings', { check_updates: v }); } }),
+    h('div', { class: 'ms-caption', style: { textAlign: 'center' } }, t('settings.updates.auto')),
+    h('div', { class: 'row' }, Key(t('settings.updates.check'), { onclick: async () => {
+      const u = await updateBanner(true);
+      upStatus.textContent = !u || u.error ? t('settings.updates.error', { e: u?.error || '' }) : u.available ? t('settings.updates.available', { v: u.latest }) : t('settings.updates.uptodate');
+    } }), upStatus),
+    h('p', { class: 'data subtle' }, t('settings.updates.note'))));
+
   return h('div', { class: 'stack gap-8' },
     h('h1', { class: 'display-l' }, t('settings.title')),
     h('div', { class: 'cols' },
@@ -242,9 +287,11 @@ async function settingsView() {
       ),
       h('div', { class: 'stack gap-6' },
         arc && h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('settings.arc')), arcState)),
-        h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('settings.ai')), provRow, keyBox)))),
+        h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('settings.ai')), provRow, keyBox)),
+        upPanel)),
     h('p', { class: 'data subtle' }, t('settings.about')));
 }
 
 window.addEventListener('hashchange', render);
+setInterval(() => updateBanner(), 6 * 3600 * 1000);
 render();

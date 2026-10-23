@@ -221,3 +221,11 @@ textarea.area::placeholder{color:var(--orbit)}
 .ms-select:focus-visible{outline:2px solid var(--signal)}
 /* person crops keep the head in view */
 .cell .ph img,.acard .ph img{object-position:50% 8%}
+
+/* brand */
+.wm img{display:block;height:40px;width:auto}
+.hero-logo{margin:0}.hero-logo img{display:block;height:clamp(80px,12vw,120px);width:auto}
+
+/* update banner */
+.update-bar{position:relative;z-index:15;max-width:1280px;margin:0 auto;padding:var(--space-4) var(--space-8) 0}
+pre.notes{white-space:pre-wrap;font-family:var(--font-mono);font-size:12px;line-height:18px;color:var(--text-muted);max-height:60vh;overflow:auto;margin:0}

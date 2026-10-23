@@ -33,6 +33,8 @@ with sync_playwright() as p:
 
     def shot(name):
         settle()
+        leaked = page.evaluate("document.body.innerText.includes('[object ') || document.body.innerText.includes('undefined')")
+        check(f"no '[object' or 'undefined' text on screen ({name})", not leaked)
         page.screenshot(path=f"{out}/{lang}-{name}.png")
 
     page.goto(base + "/")

@@ -11,9 +11,11 @@ from pathlib import Path
 from .jobs import Job, Jobs
 from .models.manager import ModelManager
 from .project import Project
+from .updater import Updater
 from .vision import providers as vproviders
 
-GLOBAL_DEFAULTS = {"language": "en", "use_arcface": False, "vlm_provider": None, "vlm_model": None}
+GLOBAL_DEFAULTS = {"language": "en", "use_arcface": False, "vlm_provider": None, "vlm_model": None,
+                   "check_updates": True, "update_dismissed": None}
 
 
 def default_data_dir() -> Path:
@@ -36,6 +38,7 @@ class Engine:
         self._extractor = None
         self._extractor_key = None
         self._lock = threading.RLock()
+        self.updater = Updater(self.data_dir)
 
     # --------------------------------------------------------------- settings
     def settings(self) -> dict:

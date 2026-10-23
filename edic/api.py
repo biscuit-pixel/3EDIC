@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import io
+import os
 import secrets
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -114,6 +116,38 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
                     return
                 time.sleep(0.4)
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    # --------------------------------------------------------------- updates
+    @app.get("/api/update", **api)
+    def update_info(force: bool = False):
+        if not engine.settings()["check_updates"] and not force:
+            return {"current": engine.updater.current, "available": False, "disabled": True}
+        info = engine.updater.check(force)
+        info["dismissed"] = bool(info.get("latest")) and engine.settings()["update_dismissed"] == info["latest"]
+        return info
+
+    @app.post("/api/update/install", **api)
+    def update_install():
+        info = engine.updater.check()
+        if not info.get("available") or not info.get("can_install"):
+            raise HTTPException(409, "there is no update this app can install by itself")
+        dry = os.environ.get("EDIC_UPDATE_DRYRUN") == "1"
+
+        def run(job):
+            path = engine.updater.download_and_verify(info, progress=job.progress, cancelled=job.cancelled)
+            job.message = "restarting"
+            cmd = engine.updater.apply(path, dry_run=dry)
+            if not dry:                                   # let the answer reach the UI, then get out of the installer's way
+                threading.Timer(1.5, lambda: os._exit(0)).start()
+            return {"restarting": not dry, "version": info["latest"], "command": cmd if dry else None}
+        return engine.jobs.start("update", run, "Updating to " + info["latest"]).to_dict()
+
+    @app.post("/api/open-release-page", **api)
+    def open_release_page():
+        """Open the releases page in the default browser (a native window cannot follow external links itself)."""
+        import webbrowser
+        webbrowser.open(f"https://github.com/{engine.updater.repo}/releases/latest")
+        return {"ok": True}
 
     @app.get("/api/fs", **api)
     def browse(path: str = ""):
