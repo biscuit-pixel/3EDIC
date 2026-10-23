@@ -16,7 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 windows-gpu = ["onnxruntime-directml"]      # replaces onnxruntime: NVIDIA / AMD / Intel GPUs without installing CUDA
-dev = ["pytest"]
+dev = ["pytest", "onnx"]
 research = ["scikit-learn"]                 # only needed to refit the default combiner weights (tools/fit_combiner.py)
 desktop = ["pywebview"]                     # native window for the installers
 build = ["pyinstaller", "pillow"]
