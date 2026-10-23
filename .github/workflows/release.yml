@@ -11,7 +11,7 @@ on:
     inputs:
       version:
         description: "Version for a test build (test builds are never published)"
-        default: "0.0.0-test"
+        default: "0.0.0.dev0"
 
 permissions:
   contents: read
@@ -49,7 +49,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="${INPUT_VERSION:-0.0.0-test}"; fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="${INPUT_VERSION:-0.0.0.dev0}"; fi
           echo "VERSION=$V" >> "$GITHUB_ENV"
           python packaging/set_version.py "$V"
 
