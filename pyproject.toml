@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edic"
+version = "0.1.0"
+description = "3EDIČ — sort event photos by competitor number, face and shooting order"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+  "numpy", "opencv-python-headless", "onnxruntime", "rapidocr-onnxruntime", "pillow", "httpx",
+  "fastapi", "uvicorn[standard]", "python-multipart", "scikit-learn",
+]
+
+[project.optional-dependencies]
+windows-gpu = ["onnxruntime-directml"]      # replaces onnxruntime: NVIDIA / AMD / Intel GPUs without installing CUDA
+dev = ["pytest"]
+
+[project.scripts]
+edic = "edic.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["edic*"]
+
+[tool.setuptools.package-data]
+edic = ["data/*.json", "models/*.json", "ui/**/*"]

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "pose",
+      "title": "Body pose (YOLOv8m-pose)",
+      "purpose": "Finds people and their hips, so the number, face and trunks can be located.",
+      "required": true,
+      "size": 106127982,
+      "sha256": "b44ece4006060bd708b7a542f25ae76c758ba2827a6ebe2e22b18be548e23a0b",
+      "file": "yolov8m-pose.onnx",
+      "license": "AGPL-3.0",
+      "sources": [{"url": "https://huggingface.co/Xenova/yolov8m-pose/resolve/main/onnx/model.onnx"}]
+    },
+    {
+      "id": "yunet",
+      "title": "Face finder (YuNet)",
+      "purpose": "Finds faces inside the head region.",
+      "required": true,
+      "size": 232589,
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "file": "face_detection_yunet_2023mar.onnx",
+      "license": "MIT",
+      "sources": [{"url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"}]
+    },
+    {
+      "id": "sface",
+      "title": "Face matcher (SFace)",
+      "purpose": "Turns a face into numbers so the same person can be recognised. Free for any use.",
+      "required": true,
+      "size": 38696353,
+      "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+      "file": "face_recognition_sface_2021dec.onnx",
+      "license": "Apache-2.0",
+      "sources": [{"url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"}]
+    },
+    {
+      "id": "arcface",
+      "title": "Sharper face matcher (ArcFace)",
+      "purpose": "More accurate face matching. About 5 points more photos sorted automatically.",
+      "required": false,
+      "size": 174383860,
+      "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
+      "file": "arcface_w600k_r50.onnx",
+      "license": "InsightFace non-commercial research license",
+      "license_gate": "The ArcFace weights are licensed for non-commercial research only. If you sort photos for paying clients, check with the model's authors (insightface.ai) before turning this on.",
+      "sources": [
+        {"url": "https://huggingface.co/immich-app/buffalo_l/resolve/main/recognition/model.onnx"},
+        {"url": "https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_l.zip", "zip_member": "w600k_r50.onnx"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+
+/* møušn — komponenty. Farby a rozmery prichádzajú z tokens.css (var(--bg), var(--signal)…). */
+:root{--ms-spring:cubic-bezier(.3,1.6,.5,1);--ms-beam-ease:cubic-bezier(.6,0,.2,1)}
+
+/* ---------- Logo: lomka v ø ---------- */
+/* Logo je VŽDY Bitcount Prop Single, hrúbka 370. Ťažší rez zlepí bodky (dotyk ~395). */
+.ms-logo{font-family:var(--font-display);font-weight:370;line-height:1;color:var(--text);white-space:nowrap}
+.ms-o{position:relative;display:inline-block}
+.ms-slash{position:absolute;left:41.667%;top:49%;width:.74em;height:.075em;transform:translate(-50%,-50%) rotate(-45deg);background:var(--signal);box-shadow:0 0 .08em rgba(232,7,0,.8)}
+[data-theme="light"] .ms-slash{box-shadow:none}
+
+/* ---------- Pomocné ---------- */
+.ms-caption{font-family:var(--font-mono);font-size:11px;line-height:16px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)}
+.ms-cut-m{clip-path:polygon(0 0,calc(100% - var(--cut-m)) 0,100% var(--cut-m),100% 100%,var(--cut-m) 100%,0 calc(100% - var(--cut-m)))}
+
+/* ---------- Key (vektorový kláves) ---------- */
+.ms-key{position:relative;display:inline-block;padding:0;border:0;background:transparent;cursor:pointer;color:var(--text);font:inherit}
+.ms-key>svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ms-key .edge{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.ms-key .draw{fill:none;stroke:var(--signal-hot);stroke-width:2;stroke-dasharray:100;stroke-dashoffset:100;transition:stroke-dashoffset .7s var(--ms-beam-ease)}
+.ms-key:hover .draw,.ms-key:focus-visible .draw{stroke-dashoffset:0}
+.ms-key .lbl{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;height:100%;box-sizing:border-box;padding:0 16px}
+.ms-key.tall .lbl{flex-direction:column;align-items:flex-start;justify-content:space-between;padding:12px 18px}
+.ms-key .lg{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)}
+.ms-key .lb{font-family:var(--font-display);font-weight:300;font-size:22px;line-height:1;transition:text-shadow .3s ease,font-weight .3s ease}
+.ms-key:hover .lb{font-weight:500;text-shadow:0 0 6px rgba(237,236,230,.6)}
+.ms-key:active{translate:0 2px}
+.ms-key:focus-visible{outline:none}
+.ms-key.primary .edge{stroke:var(--signal);fill:rgba(232,7,0,.12)}
+.ms-key.primary .draw{stroke:var(--text)}
+.ms-key.primary .lb{color:var(--on-signal);text-shadow:0 0 8px rgba(232,7,0,.85)}
+.ms-key.primary .lg{color:rgba(255,255,255,.7)}
+.ms-key.primary .scan{position:absolute;inset:2px;overflow:hidden;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+.ms-key.primary .scan::after{content:"";position:absolute;top:0;bottom:0;width:30px;left:-40px;background:linear-gradient(90deg,transparent,rgba(255,90,74,.55),transparent)}
+.ms-key.primary:hover .scan::after{animation:ms-sweep .9s linear infinite}
+@keyframes ms-sweep{to{left:110%}}
+.ms-key:disabled{cursor:not-allowed;opacity:.35}
+.ms-key:disabled .edge{stroke-dasharray:4 4}
+[data-theme="light"] .ms-key:hover .lb{text-shadow:none}
+
+/* ---------- Tag ---------- */
+.ms-tag{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border:1px solid currentColor;background:transparent;font-family:var(--font-display);font-weight:400;font-size:16px;line-height:1;color:var(--text);clip-path:polygon(0 0,calc(100% - var(--cut-xs)) 0,100% var(--cut-xs),100% 100%,var(--cut-xs) 100%,0 calc(100% - var(--cut-xs)))}
+.ms-tag.lg{height:40px;padding:0 16px;font-size:22px}
+.ms-tag.fill{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+.ms-tag .led{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;animation:ms-blink 1.2s steps(1) infinite}
+button.ms-tag{cursor:pointer}
+button.ms-tag[aria-pressed="true"],button.ms-tag[aria-checked="true"]{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+@keyframes ms-blink{50%{opacity:.15}}
+
+/* ---------- TextField ---------- */
+.ms-field{display:flex;flex-direction:column;gap:10px}
+.ms-field .box{position:relative}
+.ms-field input{width:100%;box-sizing:border-box;height:58px;padding:0 18px;border:0;outline:none;background:var(--bg);color:var(--text);caret-color:var(--signal);font-family:var(--font-display);font-weight:300;font-size:26px;clip-path:polygon(0 0,calc(100% - var(--cut-s)) 0,100% var(--cut-s),100% 100%,var(--cut-s) 100%,0 calc(100% - var(--cut-s)))}
+.ms-field input::placeholder{color:var(--orbit)}
+.ms-field .tk{position:absolute;width:10px;height:10px;opacity:0;pointer-events:none;z-index:2;transition:opacity .2s ease,transform .3s var(--ms-spring)}
+.ms-field .box:focus-within .tk{opacity:1;transform:translate(0,0)}
+.ms-field .tk.a{left:-6px;top:-6px;border-left:2px solid var(--signal);border-top:2px solid var(--signal);transform:translate(6px,6px)}
+.ms-field .tk.b{right:-6px;top:-6px;border-right:2px solid var(--signal);border-top:2px solid var(--signal);transform:translate(-6px,6px)}
+.ms-field .tk.c{left:-6px;bottom:-6px;border-left:2px solid var(--signal);border-bottom:2px solid var(--signal);transform:translate(6px,-6px)}
+.ms-field .tk.d{right:-6px;bottom:-6px;border-right:2px solid var(--signal);border-bottom:2px solid var(--signal);transform:translate(-6px,-6px)}
+.ms-field .dots{display:flex;gap:6px}
+.ms-field .dots span{width:5px;height:5px;border-radius:50%;background:var(--line-strong);transition:background .2s ease,transform .3s var(--ms-spring)}
+.ms-field .dots span.on{background:var(--text)}
+.ms-field .dots span.last{background:var(--signal);transform:scale(1.5)}
+
+/* ---------- Checkbox (saturn) ---------- */
+.ms-check{position:relative;width:76px;height:76px;padding:0;border:0;background:transparent;cursor:pointer;flex:none}
+.ms-check .pl{position:absolute;left:50%;top:50%;width:32px;height:32px;margin:-16px;border-radius:50%;border:2px solid var(--orbit);box-sizing:border-box;transition:border-color .3s ease,background .3s ease}
+.ms-check .rg{position:absolute;left:50%;top:50%;width:74px;height:20px;margin:-10px 0 0 -37px;border-radius:50%;border:2.5px solid var(--signal);box-sizing:border-box;box-shadow:0 0 10px rgba(232,7,0,.8);transform:rotate(-45deg) scale(0);transition:transform .55s var(--ms-spring)}
+.ms-check[aria-checked="true"] .pl{border-color:var(--text);background:var(--key)}
+.ms-check[aria-checked="true"] .rg{transform:rotate(-45deg) scale(1)}
+
+/* ---------- Knob (gombík s mesiacom) ---------- */
+.ms-knob-wrap{position:relative}
+.ms-knob{position:absolute;padding:0;border:0;border-radius:50%;background:var(--key);box-shadow:inset 0 -6px 14px rgba(0,0,0,.6),0 10px 20px rgba(0,0,0,.5);cursor:ns-resize}
+.ms-knob .rot{position:absolute;inset:0;border-radius:50%}
+.ms-knob .moon{position:absolute;left:50%;border-radius:50%;box-shadow:0 0 12px currentColor}
+.ms-knob-wrap .rdot{position:absolute;width:6px;height:6px;margin:-3px;border-radius:50%;background:var(--orbit)}
+.ms-knob-wrap .rdot.on{background:var(--text)}
+
+/* ---------- OrbitSwitch ---------- */
+.ms-orbit{position:relative;width:128px;height:128px;padding:0;border-radius:50%;border:1.5px dotted var(--orbit);background:transparent;cursor:pointer}
+.ms-orbit .arm{position:absolute;left:50%;top:50%;width:0;height:0;transition:transform .9s var(--ms-spring)}
+.ms-orbit .arm i{position:absolute;left:-64px;top:0;width:24px;height:24px;margin:-12px;border-radius:50%;background:var(--text-subtle);transition:background .3s ease,box-shadow .3s ease}
+.ms-orbit .core{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px;border-radius:50%;border:2px solid var(--text-subtle);box-sizing:border-box}
+.ms-orbit .core::after{content:"";position:absolute;left:50%;top:50%;width:48px;height:3px;background:var(--signal);box-shadow:0 0 8px rgba(232,7,0,.8);transform:translate(-50%,-50%) rotate(-45deg) scaleX(0);transition:transform .45s var(--ms-spring) .5s}
+.ms-orbit[aria-checked="true"]{border-color:var(--signal)}
+.ms-orbit[aria-checked="true"] .arm{transform:rotate(180deg)}
+.ms-orbit[aria-checked="true"] .arm i{background:var(--signal);box-shadow:0 0 14px rgba(232,7,0,.8)}
+.ms-orbit[aria-checked="true"] .core{border-color:var(--text)}
+.ms-orbit[aria-checked="true"] .core::after{transform:translate(-50%,-50%) rotate(-45deg) scaleX(1)}
+
+/* ---------- ArcSlider ---------- */
+.ms-arc{position:relative;width:380px;height:220px;padding:0;border:0;background:transparent;cursor:grab;color:var(--text)}
+.ms-arc .d{position:absolute;width:7px;height:7px;margin:-3.5px;border-radius:50%;background:var(--orbit);transition:background .15s ease}
+.ms-arc .d.on{background:var(--text)}
+.ms-arc .d.cur{background:var(--signal);transform:scale(1.3)}
+.ms-arc .thumb{position:absolute;width:34px;height:34px;margin:-17px;border-radius:50%;border:2.5px solid var(--text);background:var(--bg);box-sizing:border-box;pointer-events:none}
+.ms-arc .thumb::after{content:"";position:absolute;left:50%;top:50%;width:46px;height:3px;background:var(--signal);box-shadow:0 0 8px rgba(232,7,0,.8);transform:translate(-50%,-50%) rotate(-45deg)}
+.ms-arc .val{position:absolute;left:0;right:0;top:128px;text-align:center;font-family:var(--font-display);font-weight:200;font-size:76px;line-height:1}
+
+/* ---------- Slider ---------- */
+.ms-slider{-webkit-appearance:none;appearance:none;width:100%;height:30px;background:transparent;cursor:pointer}
+.ms-slider::-webkit-slider-runnable-track{height:2px;background:repeating-linear-gradient(90deg,var(--orbit) 0 4px,transparent 4px 8px)}
+.ms-slider::-moz-range-track{height:2px;background:repeating-linear-gradient(90deg,var(--orbit) 0 4px,transparent 4px 8px)}
+.ms-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-10px;border-radius:50%;border:2px solid var(--signal);background:var(--bg);box-shadow:0 0 10px rgba(232,7,0,.85)}
+.ms-slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;border:2px solid var(--signal);background:var(--bg);box-shadow:0 0 10px rgba(232,7,0,.85)}
+
+.ms-check:focus-visible,.ms-knob:focus-visible,.ms-orbit:focus-visible,.ms-arc:focus-visible,.ms-slider:focus-visible,button.ms-tag:focus-visible{outline:2px solid var(--signal);outline-offset:6px}
+@media (prefers-reduced-motion:reduce){.ms-key .draw,.ms-check .rg,.ms-orbit .arm,.ms-orbit .core::after,.ms-field .tk{transition:none}.ms-key.primary:hover .scan::after,.ms-tag .led{animation:none}}
