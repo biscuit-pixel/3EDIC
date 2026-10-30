@@ -111,7 +111,7 @@ To change the app icon, replace `packaging/icon-1024.png`; everything else is ge
 
 ## Group photos
 
-A photo with several competitors is written into the folder of **every** competitor it is assigned to (copy, hard link or shortcut). Which competitors count is the *Which photos go in* setting on the Export tab: **Smart** (confirmed plus very likely), **Readable numbers** (only where a number was read on that photo), **Everyone plausible**, or **Only my decisions**. On the *Tag* screen you click each person on the photo and say who they are, which is the most exact way.
+By default a photo with several competitors is written into the folder of **every** competitor it is assigned to (copy, hard link or shortcut). The *Photos with several people* setting (Albums and Export tabs) changes that: **only the main person** (the biggest on the photo), **one group folder** (`_groups`, not in individual folders) or **both**. Which competitors count is the *Which photos go in* setting on the Export tab: **Smart** (confirmed plus very likely), **Readable numbers** (only where a number was read on that photo), **Everyone plausible**, or **Only my decisions**. On the *Tag* screen you click each person on the photo and say who they are, which is the most exact way.
 
 ## Models
 

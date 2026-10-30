@@ -34,7 +34,42 @@ def _place(src: Path, dst: Path, mode: str):
         shutil.copy2(src, dst)
 
 
-def plan(project, assign_mode: str | None = None, template: str | None = None, include_unsorted: bool = True):
+GROUPS = "_groups"
+GROUP_MODES = ("all", "main", "separate", "both")
+
+
+def _apply_group_mode(project, pairs, comps, mode):
+    """A photo with several competitors: keep it in every album (all), only in the album of the biggest person (main),
+    only in the Group photos folder (separate) or in both (both). -> (pairs, ids of the group photos that go to GROUPS)"""
+    if mode not in GROUP_MODES or mode == "all":
+        return pairs, set()
+    by_photo: dict[int, list] = {}
+    for pair in pairs:
+        if comps[pair[1]]["kind"] == "competitor":
+            by_photo.setdefault(pair[0], []).append(pair)
+    groups = {pid: ps for pid, ps in by_photo.items() if len({p[1] for p in ps}) > 1}
+    if not groups:
+        return pairs, set()
+    people = project.load_persons()
+    with project.lock:
+        who = {(r["photo_id"], r["competitor_id"]): r["person_idx"] for r in project.con.execute("SELECT photo_id,competitor_id,person_idx FROM assignments WHERE person_idx IS NOT NULL")}
+
+    def area(photo_id, comp_id):
+        i = who.get((photo_id, comp_id))
+        ps = people.get(photo_id, [])
+        return (ps[i].box[2] - ps[i].box[0]) * (ps[i].box[3] - ps[i].box[1]) if i is not None and 0 <= i < len(ps) else 0.0
+
+    drop = set()
+    for pid, ps in groups.items():
+        if mode == "main":
+            keep = max(ps, key=lambda p: area(pid, p[1]))
+            drop |= {(pid, p[1]) for p in ps if p is not keep}
+        elif mode == "separate":
+            drop |= {(pid, p[1]) for p in ps}
+    return [p for p in pairs if (p[0], p[1]) not in drop], (set(groups) if mode in ("separate", "both") else set())
+
+
+def plan(project, assign_mode: str | None = None, template: str | None = None, include_unsorted: bool = True, group_mode: str | None = None):
     """What would be written: {folder: [(photo name, source path, how)]} - no files are touched."""
     review = Review(project)
     template = template or project.setting("folder_template")
@@ -42,10 +77,14 @@ def plan(project, assign_mode: str | None = None, template: str | None = None, i
     photos = {p["id"]: p for p in project.photos()}
     folders: dict[str, list] = {}
     placed = set()
-    for photo_id, comp_id, how in review.effective(assign_mode):
+    pairs, group_ids = _apply_group_mode(project, review.effective(assign_mode), comps, group_mode or project.setting("group_mode"))
+    for photo_id, comp_id, how in pairs:
         c = comps[comp_id]
         folders.setdefault(folder_name(template, c["number"], c["name"], c["variant"], c["kind"]), []).append((photos[photo_id], how))
         placed.add(photo_id)
+    if group_ids:
+        folders[GROUPS] = [(photos[i], "group") for i in sorted(group_ids)]
+        placed |= group_ids
     if include_unsorted:
         rest = [p for pid, p in photos.items() if pid not in placed and p["processed"]]
         if rest:

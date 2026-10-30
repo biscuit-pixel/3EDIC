@@ -133,7 +133,7 @@ async function singleView(ctx, head) {
 
   function draw() {
     clear(host);
-    const stage = PhotoStage({ src: img(pid, curId, previewWidth()), width: detail.width, height: detail.height, maxVh: 48, cls: 'card-anim' });
+    const stage = PhotoStage({ src: img(pid, curId, previewWidth()), width: detail.width, height: detail.height, maxVh: 56, cls: 'card-anim' });
     const labelOf = (p) => {
       if (p.assigned.length) return { text: p.assigned.map((c) => c.label).join(' '), kind: 'done' };
       const s = [...p.suggested].sort((a, b) => b.p - a.p)[0];
@@ -144,9 +144,9 @@ async function singleView(ctx, head) {
       const box = h('button', { class: `pbox${p.idx === sel ? ' sel' : ''}${far ? ' far' : ''}${resolved(p) ? ' ok' : ''}`, type: 'button', 'aria-label': `${p.idx + 1}`, onclick: () => { sel = p.idx; draw(); } });
       placeBox(box, p.box, detail.width, detail.height);
       const l = labelOf(p);
-      const at = p.anchor || [p.box[0], p.box[1]];                      // the label sits where the number is on the shirt
-      const chip = h('div', { class: `plabel ${l.kind}${p.idx === sel ? ' sel' : ''}${far ? ' far' : ''}`, onclick: () => { sel = p.idx; draw(); } }, l.text, l.conf != null && h('small', null, pct(l.conf)));
-      placePoint(chip, at, detail.width, detail.height);
+      // The label sits at the top of the person (head and shoulders), never over the hips: the number is what you are reading.
+      const chip = h('div', { class: `plabel ${l.kind}${p.idx === sel ? ' sel' : ''}${far ? ' far' : ''}`, onclick: () => { sel = p.idx; draw(); } }, h('span', null, l.text), l.conf != null && h('small', null, pct(l.conf)));
+      placePoint(chip, [(p.box[0] + p.box[2]) / 2, p.box[1]], detail.width, detail.height);
       stage.layer.append(box, chip);
     }
     const strip = h('div', { class: 'filmstrip', role: 'list' }, frames.map((f) => h('button', { class: `frame ${f.state}${f.current ? ' cur' : ''}`, type: 'button', role: 'listitem', title: f.tags.map((x) => x.label).join(' '),

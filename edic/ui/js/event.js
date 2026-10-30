@@ -5,7 +5,7 @@ import { go, reload } from './app.js';
 import { renderOverview } from './workflow.js';
 import { renderCheck } from './review.js';
 import { renderTag } from './tag.js';
-import { renderAlbums } from './albums.js';
+import { renderAlbums, groupModePicker } from './albums.js';
 
 const TABS = ['overview', 'check', 'tag', 'albums', 'find', 'export'];
 
@@ -108,7 +108,8 @@ async function findTab({ pid }) {
 }
 
 // ------------------------------------------------------------------ export
-async function exportTab({ pid, project }) {
+async function exportTab(ctx) {
+  const { pid, project } = ctx;
   const cfg = { assign_mode: project.settings.assign_mode, template: project.settings.folder_template, mode: project.settings.export_mode, dest: '' };
   const plan = h('div', { class: 'plan' });
   const total = h('div', { class: 'num sm' });
@@ -136,7 +137,7 @@ async function exportTab({ pid, project }) {
     total.textContent = pad3(p.files);
     clear(plan);
     if (!p.folders.length) plan.append(h('p', { class: 'muted' }, t('export.noneyet')));
-    for (const f of p.folders) plan.append(h('div', { class: 'r' }, h('span', { style: f.name === '_unsorted' ? { color: 'var(--text-subtle)' } : null }, f.name === '_unsorted' ? t('export.unsorted') : f.name === 'Others' ? t('album.others') : f.name), h('span', { class: 'data subtle' }, t('export.files', { n: f.count }))));
+    for (const f of p.folders) plan.append(h('div', { class: 'r' }, h('span', { style: f.name === '_unsorted' ? { color: 'var(--text-subtle)' } : null }, f.name === '_unsorted' ? t('export.unsorted') : f.name === 'Others' ? t('album.others') : f.name === '_groups' ? t('export.groups') : f.name), h('span', { class: 'data subtle' }, t('export.files', { n: f.count }))));
   }
   const tpl = Field({ label: t('export.template'), value: cfg.template, id: 'tpl', maxlength: 60, onInput: (v) => { cfg.template = v; } });
   tpl.input.addEventListener('change', () => save('folder_template', cfg.template));
@@ -153,6 +154,7 @@ async function exportTab({ pid, project }) {
   return h('div', { class: 'cols side' },
     h('div', { class: 'stack gap-6' },
       h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('export.mode')), modes)),
+      h('div', { class: 'panel' }, h('div', { class: 'panel-in' }, groupModePicker(ctx, () => refresh()))),
       h('div', { class: 'panel' }, h('div', { class: 'panel-in stack' }, tpl.el,
         h('div', { class: 'tags' }, ['{number:03d}', '{number:03d} {name}', '{name} {number}'].map((x) => Tag(x, { onclick: () => { tpl.value = x; cfg.template = x; save('folder_template', x); } }))),
         h('div', { class: 'ms-caption' }, t('export.how')), how))),

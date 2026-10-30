@@ -3,6 +3,18 @@ import { t, pad3 } from './i18n.js';
 import { h, api, img, crop, clear, Key, Tag, Field, DotBar, lightbox, toast, modal, burstAt } from './lib.js';
 import { go } from './app.js';
 
+/** How a photo with several competitors on it is written to the folders. Saved per event. */
+export function groupModePicker(ctx, onchange) {
+  const box = h('div', { class: 'cols' });
+  const draw = () => {
+    clear(box).append(...['all', 'main', 'separate', 'both'].map((m) => h('button', { class: 'choice', type: 'button', 'aria-pressed': String(ctx.project.settings.group_mode === m), onclick: async () => {
+      await api.put(`/api/projects/${ctx.pid}/settings`, { group_mode: m }); ctx.project.settings.group_mode = m; draw(); onchange?.(m);
+    } }, h('span', { class: 't' }, t('group.' + m)), h('span', { class: 'd' }, t('group.' + m + '.d')))));
+  };
+  draw();
+  return h('div', { class: 'stack' }, h('div', { class: 'ms-caption' }, t('group.title')), box, h('p', { class: 'data subtle' }, t('group.note')));
+}
+
 export async function renderAlbums(ctx) {
   const { pid } = ctx;
   const album = await api.get(`/api/projects/${pid}/review/album`);
@@ -21,7 +33,8 @@ export async function renderAlbums(ctx) {
       Key(t('albums.delempty', { n: empty.length }), { h: 40, disabled: !empty.length, onclick: async () => {
         const r = await api.del(`/api/projects/${pid}/albums/empty`); toast(t('albums.deleted', { n: r.deleted })); ctx.reload();
       } }))));
-  if (!album.length) return h('div', { class: 'stack gap-6' }, bar, h('div', { class: 'empty' }, h('p', { class: 'body-l muted' }, t('albums.none'))));
+  const groups = h('div', { class: 'panel' }, h('div', { class: 'panel-in' }, groupModePicker(ctx)));
+  if (!album.length) return h('div', { class: 'stack gap-6' }, bar, groups, h('div', { class: 'empty' }, h('p', { class: 'body-l muted' }, t('albums.none'))));
   const cards = album.map((c) => {
     const f = c.confirmed + c.auto + c.check ? (c.confirmed + c.auto) / (c.confirmed + c.auto + c.check) : 0;
     const bar_ = DotBar({ value: f, n: 20 }); bar_.classList.add('mini');
@@ -32,7 +45,7 @@ export async function renderAlbums(ctx) {
       h('div', { class: 'meta' }, h('div', { class: 'big' }, c.kind === 'others' ? t('album.others') : c.label), c.name && c.kind !== 'others' && h('div', { class: 'title muted', style: { fontSize: '20px' } }, c.name), bar_,
         h('div', { class: 'data subtle' }, `${c.confirmed} ${t('album.confirmed')} · ${c.auto} ${t('album.auto')}${c.check ? ` · ${c.check} ${t('album.check')}` : ''}`)));
   });
-  return h('div', { class: 'stack gap-6' }, bar, h('div', { class: 'album' }, cards));
+  return h('div', { class: 'stack gap-6' }, bar, groups, h('div', { class: 'album' }, cards));
 }
 
 function namesDialog(ctx) {
@@ -125,7 +138,7 @@ async function openAlbum(ctx, c) {
       h('div', { class: 'row wrap' }, Tag(c.label), !items.length && Key(t('common.delete'), { h: 36, onclick: async () => { await api.del(`/api/projects/${pid}/competitors/${c.id}`); done(); } }),
         h('span', { class: 'data subtle' }, t('album.renumber.hint'))));
   m = modal({ title: others ? t('album.others') : `${c.label} ${c.name || ''}`, wide: true,
-    body: h('div', { class: 'stack' }, head, h('div', { class: 'hr' }), h('p', { class: 'data subtle' }, t('album.select.hint')), actionsRow, count, items.length ? grid : h('p', { class: 'muted' }, t('album.none'))) });
+    body: h('div', { class: 'stack' }, head, h('div', { class: 'hr' }), h('div', { class: 'sticky-bar' }, h('p', { class: 'data subtle' }, t('album.select.hint')), actionsRow, count), items.length ? grid : h('p', { class: 'muted' }, t('album.none'))) });
   drawGrid();
 }
 

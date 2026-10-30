@@ -44,7 +44,7 @@ with sync_playwright() as p:
     page.reload(); settle(800)
 
     # ---- check grid: untick two, confirm; the two go to the tagging list
-    t0 = to_tag()
+    acc0 = api(f"/api/projects/{pid}/review/stats")["accepted_pairs"]
     page.goto(f"{base}/#/e/{pid}/check"); settle(1500)
     cells = page.locator(".grid .cell")
     n = cells.count()
@@ -52,7 +52,8 @@ with sync_playwright() as p:
         shot("check")
         cells.nth(0).click(); cells.nth(1).click()
         page.locator(".ms-key.primary").first.click(); settle(1200)
-        check("rejected photos return to the tagging list", to_tag() >= t0, f"{t0} -> {to_tag()}")
+        acc1 = api(f"/api/projects/{pid}/review/stats")["accepted_pairs"]
+        check("confirming accepts all but the two clicked thumbnails", acc1 - acc0 == n - 2, f"{acc0} -> {acc1} of {n}")
     else:
         print("note: nothing to check")
 

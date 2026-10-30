@@ -26,6 +26,7 @@ DEFAULTS = {
     "folder_template": "{number:03d}",   # also {name}
     "export_mode": "copy",      # copy | hardlink | symlink
     "ocr_min_number": 10,
+    "group_mode": "all",        # photos with several competitors: all (every album) | main (the biggest person only) | separate (a Group photos folder only) | both
     "roster_mode": "auto",      # auto: albums appear for numbers found | list: only the start list (plus manual tagging)
 }
 

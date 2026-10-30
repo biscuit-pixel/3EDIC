@@ -233,7 +233,7 @@ pre.notes{white-space:pre-wrap;font-family:var(--font-mono);font-size:12px;line-
 /* ---- photo stage: a wrapper with exactly the photo's proportions, so boxes in % match the picture at any window size ---- */
 .pstage{position:relative;aspect-ratio:var(--ar);width:min(100%,calc(var(--mh,68vh)*var(--ar)));background:var(--bg)}
 .pstage>img{position:absolute;inset:0;width:100%;height:100%;display:block;-webkit-user-drag:none;user-select:none}
-.pstage .layer{position:absolute;inset:0;overflow:hidden}
+.pstage .layer{position:absolute;inset:0}
 .pstage.markable{cursor:crosshair;touch-action:none;user-select:none}
 .pstage .box{position:absolute;border:2px solid var(--signal);box-shadow:var(--glow-signal);pointer-events:none}
 .pstage .pbox{position:absolute;border:2px solid var(--orbit);background:none;padding:0;cursor:pointer;transition:border-color .25s ease,box-shadow .25s ease}
@@ -241,13 +241,13 @@ pre.notes{white-space:pre-wrap;font-family:var(--font-mono);font-size:12px;line-
 .pstage .pbox.ok{border-color:var(--cobalt-text)}
 .pstage .pbox.sel{border-color:var(--signal-hot);box-shadow:var(--glow-signal)}
 .pstage .pbox.far{border-style:dashed;opacity:.55}
-.plabel{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:baseline;gap:6px;padding:1px 8px;background:rgba(6,6,7,.86);border:1px solid var(--orbit);font-family:var(--font-display);font-size:20px;line-height:26px;white-space:nowrap;cursor:pointer;transition:transform .35s var(--ms-spring)}
-.plabel small{font-family:var(--font-mono);font-size:10px;color:var(--text-subtle)}
+.plabel{position:absolute;translate:-50% 6px;display:flex;flex-direction:column;align-items:center;padding:1px 7px;background:rgba(6,6,7,.86);border:1px solid var(--orbit);font-family:var(--font-display);font-size:19px;line-height:23px;white-space:nowrap;cursor:pointer;transition:scale .3s var(--ms-spring)}
+.plabel small{font-family:var(--font-mono);font-size:10px;line-height:12px;color:var(--text-subtle)}
 .plabel.done{border-color:var(--cobalt-text);color:var(--cobalt-text)}
 .plabel.sug{border-color:var(--amber);color:var(--amber)}
 .plabel.none{color:var(--text-subtle)}
 .plabel.far{opacity:.6;font-size:15px;line-height:20px}
-.plabel.sel{background:var(--signal);border-color:var(--signal);color:var(--on-signal);transform:translate(-50%,-50%) scale(1.12)}
+.plabel.sel{background:var(--signal);border-color:var(--signal);color:var(--on-signal);scale:1.1}
 .plabel.sel small{color:rgba(255,255,255,.8)}
 .lightbox{position:fixed;inset:0;z-index:95;background:rgba(6,6,7,.96);overflow:auto;cursor:zoom-out;display:flex}
 .lightbox img{margin:auto;display:block;max-width:none;width:min(2400px,max(100%,1600px))}
@@ -321,3 +321,10 @@ body[data-tab="tag"] main{padding-top:var(--space-5)}
 /* credit */
 .credit{display:inline-flex;align-items:center;gap:var(--space-3)}
 .foot{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:0 var(--space-8) 72px;display:flex;justify-content:flex-end}
+
+/* a dialog never taller than the screen: the title and buttons stay put, the middle scrolls */
+.modal{max-height:calc(100vh - 2*var(--space-5))}
+.modal>.panel-in{min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.modal-body{min-height:0;flex:1;overflow:auto;padding-right:4px}
+.modal-head,.modal-actions{flex:none}
+.sticky-bar{position:sticky;top:0;z-index:3;background:var(--surface);padding:6px 0 10px;display:flex;flex-direction:column;gap:var(--space-2)}

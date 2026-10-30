@@ -279,3 +279,26 @@ def test_bulk_tag_of_a_single_subject_drops_the_models_other_guesses(project):
     rv.bulk_tag([{"photo_id": ph}], c41)
     rows = {r["competitor_id"]: r["status"] for r in project.con.execute("SELECT competitor_id,status FROM assignments WHERE photo_id=?", (ph,))}
     assert rows[c41] == "accepted" and rows.get(c42) == "rejected"
+
+
+def test_group_photo_modes_in_the_export_plan(project):
+    rv = Review(project)
+    c41, c42 = comp_id(project, 41), comp_id(project, 42)
+    ph = pid(project, 8)                                       # the group photo: person 0 is 41, person 1 is 42
+    people = project.load_persons()[ph]
+    people[1].box = (people[1].box[0], people[1].box[1] + 400, people[1].box[2], people[1].box[3])        # 42 is smaller (further away)
+    project.save_persons(ph, people)
+    rv.set_person(ph, 0, c41)
+    rv.set_person(ph, 1, c42)
+    names = lambda mode: {k: [p["name"] for p, _ in v] for k, v in plan(project, "manual", group_mode=mode).items()}
+    gname = project.photos()[8]["name"]
+    every = names("all")
+    assert gname in every["041"] and gname in every["042"] and "_groups" not in every
+    main = names("main")
+    assert gname in main["041"] and gname not in main.get("042", [])
+    sep = names("separate")
+    assert gname not in sep.get("041", []) and gname not in sep.get("042", []) and sep["_groups"] == [gname]
+    both = names("both")
+    assert gname in both["041"] and gname in both["042"] and both["_groups"] == [gname]
+    project.set_setting("group_mode", "separate")                # the project's own setting is the default
+    assert "_groups" in plan(project, "manual")

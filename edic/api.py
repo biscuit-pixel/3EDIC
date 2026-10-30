@@ -251,6 +251,8 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
     @app.put("/api/projects/{pid}/settings", **api)
     def project_settings(pid: str, changes: dict = Body(...)):
         p = proj(pid)
+        if "group_mode" in changes and changes["group_mode"] not in export_mod.GROUP_MODES:
+            raise HTTPException(400, "group_mode must be one of " + ", ".join(export_mod.GROUP_MODES))
         for k, v in changes.items():
             try:
                 p.set_setting(k, v)
