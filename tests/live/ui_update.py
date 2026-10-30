@@ -62,6 +62,8 @@ with sync_playwright() as p:
     page = b.new_context(viewport={"width": 1300, "height": 800}).new_page()
     page.on("pageerror", lambda e: problems.append(f"pageerror {e}"))
     page.goto(srv.url)
+    page.evaluate("fetch('/api/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({tutorial_seen:true})}).then(r=>r.json())")
+    page.reload(); page.wait_for_timeout(500)
     page.goto(srv.url + "#/settings")
     page.wait_for_timeout(2500)
     check("banner shows the new version", page.locator("#banner .update-bar").count() == 1 and "9.9.9" in page.locator("#banner").inner_text())

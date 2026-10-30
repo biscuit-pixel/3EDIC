@@ -101,7 +101,7 @@ def smoke(with_models: bool) -> int:
     try:
         page = op.open(srv.url).read().decode("utf-8")
         check("serves the UI", "3EDI" in page and any(c.name == "edic" for c in jar))
-        for path in ("js/app.js", "js/review.js", "css/tokens.css", "css/app.css", "fonts/bitcount-prop-single-latin.woff2", "fonts/bitcount-prop-single-latin-ext.woff2"):
+        for path in ("js/app.js", "js/review.js", "js/tag.js", "js/workflow.js", "js/albums.js", "js/tutorial.js", "css/tokens.css", "css/app.css", "fonts/bitcount-prop-single-latin.woff2", "fonts/bitcount-prop-single-latin-ext.woff2"):
             check("static " + path, op.open(srv.url + path).status == 200)
         sysinfo = json.loads(op.open(srv.url + "api/system").read())
         check("api/system", sysinfo["version"] and sysinfo["hardware"]["providers"], f'{sysinfo["version"]} {sysinfo["hardware"]["providers"]}')

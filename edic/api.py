@@ -289,7 +289,7 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
     @app.get("/api/projects/{pid}/photos/{photo_id}/image", **api)
     def photo_image(pid: str, photo_id: int, w: int = 640):
         """Cached JPEG thumbnail, EXIF-rotated like the pose boxes. w snaps to a fixed size to keep the cache small."""
-        w = min(THUMB_SIZES, key=lambda s: abs(s - w))
+        w = next((s for s in THUMB_SIZES if s >= w), THUMB_SIZES[-1])        # round UP: a preview must never be softer than what was asked for
         cache = proj(pid).root / "thumbs" / f"{photo_id}_{w}.jpg"
         if not cache.exists():
             cache.parent.mkdir(exist_ok=True)
@@ -439,13 +439,14 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
         with p.lock:
             ex = [dict(r) for r in p.con.execute("SELECT id,photo_id,person_idx,number,rel_box FROM bib_examples")]
             people = p.load_persons()
-            cands = []
+            cands, fallback = [], []
             for ph in p.photos():                               # front-facing, big, hips visible: where a tag is likely visible
                 ps = people.get(ph["id"], [])
                 if ph["height"] and ps:
                     big = max(ps, key=lambda q: q.height)
-                    if big.face is not None and big.height > 0.5 * ph["height"] and big.kpts[11, 2] > 0.5 and big.kpts[12, 2] > 0.5:
-                        cands.append(ph["id"])
+                    if big.kpts[11, 2] > 0.5 and big.kpts[12, 2] > 0.5 and big.height > 0.3 * ph["height"]:
+                        (cands if big.face is not None and big.height > 0.5 * ph["height"] else fallback).append(ph["id"])
+            cands = cands or fallback
         step = max(1, len(cands) // 12)
         return {"examples": ex, "profile": (p.bib_profile().to_dict() if p.bib_profile() else None), "suggested_photos": cands[::step][:12]}
 

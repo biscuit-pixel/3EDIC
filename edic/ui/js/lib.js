@@ -7,7 +7,7 @@ export function h(tag, attrs, ...kids) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k === 'class') el.className = v;
-    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
     else if (v === true) el.setAttribute(k, '');
     else el.setAttribute(k, v);
@@ -248,6 +248,15 @@ export function burst(x, y, { n = 16, color = 'var(--signal)' } = {}) {
 }
 export function burstAt(el, opts) { const r = el.getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, opts); }
 
+/** The system's own folder dialog when running in the app window; the in-app browser otherwise. */
+export const hasNativePicker = () => typeof window.pywebview?.api?.pick_folder === 'function';
+export async function selectFolder({ start = '', title = '' } = {}) {
+  if (hasNativePicker()) {
+    try { return (await window.pywebview.api.pick_folder(title)) || null; } catch (e) { console.warn('native folder dialog failed', e); }
+  }
+  return pickFolder({ start, title: title || t('new.pick') });
+}
+
 /** Server-side folder browser (a browser cannot hand over a real path). Resolves to a path or null. */
 export function pickFolder({ start = '', title = t('new.pick') } = {}) {
   return new Promise((resolve) => {
@@ -282,3 +291,63 @@ export const evidenceChips = (ev) => {
   if (ev.seq) out.push(Tag(`${t('ev.seq')}`, { kind: 'muted' }));
   return out;
 };
+
+// ------------------------------------------------------------- photo stage
+/** A photo with a layer on top for boxes and labels. The wrapper has exactly the photo's proportions (aspect-ratio plus a
+ *  width that respects the height limit), so a percentage on the layer is a percentage of the photo at ANY window size. */
+export function PhotoStage({ src, width, height, maxVh = 68, cls = '' } = {}) {
+  const ar = width && height ? width / height : 1.5;
+  const im = h('img', { src, alt: '', draggable: 'false' });
+  const layer = h('div', { class: 'layer' });
+  const el = h('div', { class: `pstage ${cls}`, style: { '--ar': String(ar), '--mh': maxVh + 'vh' } }, im, layer);
+  return { el, layer, img: im, ar };
+}
+/** Put an element on the stage at a box given in photo pixels. */
+export function placeBox(el, box, width, height) {
+  Object.assign(el.style, { left: box[0] / width * 100 + '%', top: box[1] / height * 100 + '%', width: (box[2] - box[0]) / width * 100 + '%', height: (box[3] - box[1]) / height * 100 + '%' });
+  return el;
+}
+export function placePoint(el, pt, width, height) {
+  Object.assign(el.style, { left: pt[0] / width * 100 + '%', top: pt[1] / height * 100 + '%' });
+  return el;
+}
+/** Draw a rectangle with the pointer on a PhotoStage. onchange gets [x1,y1,x2,y2] as fractions (0..1), or null when cleared. */
+export function drawBox(stage, onchange) {
+  const rectEl = h('div', { class: 'box hidden' });
+  stage.layer.append(rectEl);
+  let rect = null, start = null;
+  const rel = (e) => { const b = stage.el.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; };
+  const draw = () => {
+    if (!rect) return;
+    Object.assign(rectEl.style, { left: rect[0] * 100 + '%', top: rect[1] * 100 + '%', width: (rect[2] - rect[0]) * 100 + '%', height: (rect[3] - rect[1]) * 100 + '%' });
+    rectEl.classList.remove('hidden');
+  };
+  stage.el.classList.add('markable');
+  stage.el.addEventListener('pointerdown', (e) => { stage.el.setPointerCapture(e.pointerId); start = rel(e); rect = [...start, ...start]; draw(); });
+  stage.el.addEventListener('pointermove', (e) => { if (!start) return; const p = rel(e); rect = [Math.min(start[0], p[0]), Math.min(start[1], p[1]), Math.max(start[0], p[0]), Math.max(start[1], p[1])]; draw(); });
+  stage.el.addEventListener('pointerup', () => { start = null; onchange?.(rect); });
+  return { get rect() { return rect; }, clear() { rect = null; rectEl.classList.add('hidden'); onchange?.(null); } };
+}
+/** Largest preview that makes sense for the current screen: sharp, but not a 12 MB file for a thumbnail. */
+export const previewWidth = (share = 0.62) => [640, 1280, 2400].find((w) => w >= innerWidth * share * (window.devicePixelRatio || 1)) || 2400;
+
+/** Full-window zoom of one photo (click to close, scroll to look around). */
+export function lightbox(src) {
+  const close = () => { o.remove(); document.removeEventListener('keydown', esc, true); };
+  const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  const o = h('div', { class: 'lightbox', onclick: close }, h('img', { src, alt: '' }));
+  document.body.append(o);
+  document.addEventListener('keydown', esc, true);
+}
+
+/** Wait for a click/Enter/typing inside `root` to be done with, then run fn once (debounce for text inputs). */
+export const debounce = (fn, ms = 300) => { let id; return (...a) => { clearTimeout(id); id = setTimeout(() => fn(...a), ms); }; };
+
+/** One keyboard map per screen: binding again replaces the previous one, and leaving the screen clears it. */
+let offKeys = null;
+export function clearKeys() { offKeys?.(); offKeys = null; }
+export function bindKeys(handler) {
+  clearKeys();
+  document.addEventListener('keydown', handler);
+  offKeys = () => document.removeEventListener('keydown', handler);
+}

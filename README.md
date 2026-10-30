@@ -16,9 +16,23 @@ You point 3EDIČ at a folder of photos from a competition (or a conference). It 
 4. **Anchors and galleries** — persons whose number was read (or that you confirmed) become anchors. Their faces and trunks colours form a gallery per competitor, cleaned by consensus so a misread number does not poison it.
 5. **Combine** — a small logistic regression turns number evidence, best face match and trunks colour into a probability per (photo, competitor). Default weights ship with the app.
 6. **Order** — neighbouring photos (by EXIF time) vote: if the competitor was in the photo a second ago, they probably are in this one.
-7. **Review** — confident pairs are assigned automatically; the rest appear in the review screens (grid, cards, group tagging, unknown, album). Every decision becomes a new anchor, so the next rescore gets better.
+7. **Review** — confident pairs are assigned automatically; the rest appear in the **Check** grid (click the ones that do not match) and the **Tag** screen (photos nobody could place). Every decision becomes a new anchor, so the next rescore gets better.
 
 Optional: send small crops of the hip area (never faces, never whole photos) to a vision LLM (Claude, ChatGPT or Gemini, with your own API key) to read numbers the local OCR could not.
+
+## The workflow
+
+An event is five steps on one **Overview** screen, the current one open:
+
+1. **Photos** — drag a folder into the window or choose it with the system's folder dialog. Photos are never moved. Tick *I want to add participant names* if you have a start list; otherwise 3EDIČ makes an album for every number it finds (and for numbers you type while tagging).
+2. **Show a few numbers** — before the long analysis, 3EDIČ looks at a dozen photos so you can drag a box around a number and type it. Two examples teach it where numbers sit. Skippable.
+3. **Analysis** — people, numbers, faces; runs on the processor or the graphics card (Settings → Hardware).
+4. **AI helper** (optional) — Claude, ChatGPT or Gemini read the numbers the local OCR could not, with your own key. The cost is shown first.
+5. **Check and tag** — *Check* confirms what is probably right in one grid per competitor; *Tag* shows each remaining photo with its neighbours in shooting order (4 before and after by default, configurable) and every person boxed. Click a person, type the number, press Enter; a photo with several people stays until all are tagged.
+
+Keys on the Tag screen: `←` back, `→` next, `↑` yes (accept the suggestion), `↓` no, digits + `Enter` tag, `-` not a competitor (goes to the *Others* album), `Tab` next person, `Ctrl Z` undo, `+` zoom. *Many at once* shows the list as a grid: select a burst (Shift for a range), type one number.
+
+**Albums** are one per number: rename, renumber (onto an existing number you choose between merging and keeping both as `056` and `056_2`), split off a look-alike number, take wrong photos out (they go back to tagging, to *Others* or to another number), delete empty albums. A group photo is in the album of everyone tagged on it. A status bar in the bottom-left corner always shows what is running and on which device.
 
 ## Measured on the NPC 365 · 3.5. event
 
@@ -73,7 +87,7 @@ To change the app icon, replace `packaging/icon-1024.png`; everything else is ge
 
 ## Group photos
 
-A photo with several competitors is written into the folder of **every** competitor it is assigned to (copy, hard link or shortcut). Which competitors count is the *Which photos go in* setting on the Export tab: **Smart** (confirmed plus very likely), **Readable numbers** (only where a number was read on that photo), **Everyone plausible**, or **Only my decisions**. In *Review → Groups* you click each person on the photo and say who they are, which is the most exact way.
+A photo with several competitors is written into the folder of **every** competitor it is assigned to (copy, hard link or shortcut). Which competitors count is the *Which photos go in* setting on the Export tab: **Smart** (confirmed plus very likely), **Readable numbers** (only where a number was read on that photo), **Everyone plausible**, or **Only my decisions**. On the *Tag* screen you click each person on the photo and say who they are, which is the most exact way.
 
 ## Models
 
@@ -97,7 +111,7 @@ edic/vision/     pose, bib OCR + calibration profile, faces, trunks colour (ONNX
 edic/scoring.py  anchors, galleries, features, combiner, sequence stage
 edic/data/       default combiner weights (fitted by tools/fit_combiner.py)
 edic/project.py  SQLite project: ingest, extract, rescore, calibration
-edic/review.py   decisions, undo, review queues, album
+edic/review.py   decisions, undo, tag queue, neighbours, bulk moves, albums
 edic/export.py   folders as copy / hard link / shortcut, report CSV
 edic/find.py     find one person across all photos by face
 edic/models/     download manager + registry (sha256, mirrors, licence gate)
@@ -111,17 +125,17 @@ tests/           pytest suite (synthetic data); tests/live/ needs the dataset, n
 
 ```bash
 pip install pytest
-pytest -q                        # 35 tests, synthetic data, a few seconds
+pytest -q                        # about 90 tests, synthetic data, a few seconds
 ```
 
-`tests/live/` holds scripts that need the NPC dataset, the network or Chromium (download manager against the real hosts, API and browser flows, first-run in a real browser).
+`tests/live/` holds scripts that need the NPC dataset, the network or Chromium (download manager against the real hosts, API and browser flows, first-run in a real browser; `ui_v2*.py` drive the whole workflow in Chromium, including the number-marking box at several window sizes).
 
 ## What is not tested yet
 
 - **GPU.** Developed and tested on CPU only (roughly 2–7 s per photo with every signal, depending on how many people are in it). The CUDA / DirectML / CoreML paths are selected automatically but have not been run.
 - **Windows and macOS.** Developed on Linux. The Windows drive picker and the data-directory defaults are untested.
 - **AI helper against the real services.** Request/response handling is tested against mocked HTTP only; no real API call has been made. Default model names may be out of date: change them in Settings.
-- **Installers.** There is no `.exe` / `.dmg` yet, only `pip install`.
+- **Installers and the native window.** CI builds and smoke-tests the installers headlessly; nobody has opened them on a real Windows or Mac yet. The system folder dialog and dropping a folder on the window (pywebview) cannot be exercised in CI, and neither can restarting after the working folder was moved. In a browser the app falls back to its own folder browser and cannot see a dropped folder's path.
 - **Other events.** Accuracy was measured on one event with one numbering style (round tags on the hip). Running and cycling bibs on the chest need a different OCR region.
 - **Pose resolution.** Pose runs at 640 px, as in the measurements. Small people in wide shots are often missed; a higher-resolution pass is an obvious next step.
 - **Large events.** Persons and embeddings are held in memory (about 3 KB per person); 10,000 photos should be fine, 100,000 has not been tried.

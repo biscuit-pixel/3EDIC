@@ -23,10 +23,10 @@ with sync_playwright() as p:
         print("shot", name)
 
     page.goto(base + "/")
-    page.evaluate(f"fetch('/api/settings',{{method:'PUT',headers:{{'content-type':'application/json'}},body:JSON.stringify({{language:'{lang}'}})}})")
+    page.evaluate(f"fetch('/api/settings',{{method:'PUT',headers:{{'content-type':'application/json'}},body:JSON.stringify({{language:'{lang}',tutorial_seen:true}})}}).then(r=>r.json())")
     page.goto(base + "/")
     shot("home")
-    for tab in ["photos", "roster", "number", "review", "find", "export"]:
+    for tab in ["overview", "check", "tag", "albums", "find", "export"]:
         page.goto(f"{base}/#/e/{pid}/{tab}")
         shot(tab, 1500)
     page.goto(base + "/#/settings")

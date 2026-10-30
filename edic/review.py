@@ -101,12 +101,23 @@ class Review:
         for r in self.con.execute("SELECT competitor_id FROM assignments WHERE photo_id=? AND person_idx=? AND status='suggested'", (photo_id, person_idx)).fetchall():
             self._set(photo_id, r["competitor_id"], "rejected", None, "reject")
 
+    def _sole_person(self, photo_id):
+        """The one person who is clearly the subject of this photo (others are far away or cut off), if there is exactly one."""
+        ph = self.con.execute("SELECT height FROM photos WHERE id=?", (photo_id,)).fetchone()
+        people = self.pr.load_persons().get(photo_id, [])
+        big = [i for i, p in enumerate(people) if ph and ph["height"] and p.height >= 0.12 * ph["height"]]
+        return big[0] if len(big) == 1 else None
+
     @_locked
     def bulk_tag(self, items, comp_id):
-        """Tag many thumbnails at once. items: [{photo_id, person_idx?}]"""
+        """Tag many thumbnails at once. items: [{photo_id, person_idx?}]. Without a person, a photo with a single clear
+        subject tags that person (so the model's other guesses for them are dropped); a group photo is tagged as a whole."""
         for it in items:
-            if it.get("person_idx") is not None:
-                self.set_person(it["photo_id"], it["person_idx"], comp_id)
+            idx = it.get("person_idx")
+            if idx is None:
+                idx = self._sole_person(it["photo_id"])
+            if idx is not None:
+                self.set_person(it["photo_id"], idx, comp_id)
             else:
                 self.accept(it["photo_id"], comp_id)
 
@@ -201,12 +212,24 @@ class Review:
                 "to_check_pairs": check, "unknown_photos": unknown,
                 "progress": (min(total, resolved + nobody) / total) if total else 0.0}
 
+    def _anchor(self, person):
+        """Where the number sits on this person: where a label should be drawn so the eye does not have to travel."""
+        from .vision.regions import hip_centre
+        hc = hip_centre(person)
+        if hc is None:
+            return None
+        prof = self.pr.bib_profile()
+        u = max(person.height, 1.0)
+        return [float(hc[0] + (prof.dx * u if prof else 0)), float(hc[1] + (prof.dy * u if prof else 0))]
+
     def _enrich(self, row):
         """Item for the UI: pair + the person's box (so a thumbnail can show just them) + evidence."""
         d = dict(row)
         people = self.pr.load_persons().get(d["photo_id"], [])
         j = d.get("person_idx")
-        d["box"] = [float(v) for v in people[j].box] if j is not None and 0 <= j < len(people) else None
+        ok = j is not None and 0 <= j < len(people)
+        d["box"] = [float(v) for v in people[j].box] if ok else None
+        d["anchor"] = self._anchor(people[j]) if ok else None
         ph = self.con.execute("SELECT width,height FROM photos WHERE id=?", (d["photo_id"],)).fetchone()
         d["width"], d["height"] = (ph["width"], ph["height"]) if ph else (None, None)
         ev = d.get("evidence")
@@ -326,24 +349,15 @@ class Review:
         for c in cands:
             c["competitor"] = comps.get(c["competitor_id"])
             c["evidence"] = json.loads(c["evidence"]) if c.get("evidence") else None
-        from .vision.regions import hip_box, hip_centre
+        from .vision.regions import hip_box
         shape = (brief["height"] or 0, brief["width"] or 0)
-        prof = self.pr.bib_profile()
         auto, low = self._thr()
-
-        def anchor(p):
-            """Where the number is on this person: where a label should sit so the eye does not have to travel."""
-            hc = hip_centre(p)
-            if hc is None:
-                return None
-            u = max(p.height, 1.0)
-            return [float(hc[0] + (prof.dx * u if prof else 0)), float(hc[1] + (prof.dy * u if prof else 0))]
 
         persons = []
         for j, p in enumerate(people):
             mine = [c for c in cands if c["person_idx"] == j and c["status"] != "rejected"]
             persons.append({"idx": j, "box": [float(v) for v in p.box], "has_face": p.face is not None,
-                            "hip": list(hip_box(p, shape)) if hip_box(p, shape) else None, "anchor": anchor(p),
+                            "hip": list(hip_box(p, shape)) if hip_box(p, shape) else None, "anchor": self._anchor(p),
                             "numbers": {str(k): v for k, v in p.numbers.items()},
                             "assigned": [c["competitor"] for c in mine if c["status"] == "accepted" and c["competitor"]],
                             "suggested": [{"competitor": c["competitor"], "p": c["p"], "evidence": c["evidence"]} for c in mine

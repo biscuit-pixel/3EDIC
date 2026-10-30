@@ -11,3 +11,5 @@ Not scheduled for a release of its own: bundle these into the next version that 
 - [ ] Update system: add signature verification (Authenticode / Apple notarization) so a stolen GitHub login alone cannot push a malicious update; add a "skip this version" option.
 - [ ] Code signing: Windows certificate, Apple Developer ID + notarization.
 - [ ] Pose at a higher resolution than 640 px for small people in wide shots.
+- [ ] Try the system folder dialog, drag-and-drop of a folder onto the window, and "Change working folder → Restart" in the real Windows and macOS app (pywebview behaves differently from Chromium here).
+- [ ] Tag screen: a person who is not in the model's detections cannot be boxed; add "draw a box" for that.

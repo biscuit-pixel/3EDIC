@@ -229,3 +229,91 @@ textarea.area::placeholder{color:var(--orbit)}
 /* update banner */
 .update-bar{position:relative;z-index:15;max-width:1280px;margin:0 auto;padding:var(--space-4) var(--space-8) 0}
 pre.notes{white-space:pre-wrap;font-family:var(--font-mono);font-size:12px;line-height:18px;color:var(--text-muted);max-height:60vh;overflow:auto;margin:0}
+
+/* ---- photo stage: a wrapper with exactly the photo's proportions, so boxes in % match the picture at any window size ---- */
+.pstage{position:relative;aspect-ratio:var(--ar);width:min(100%,calc(var(--mh,68vh)*var(--ar)));background:var(--bg)}
+.pstage>img{position:absolute;inset:0;width:100%;height:100%;display:block;-webkit-user-drag:none;user-select:none}
+.pstage .layer{position:absolute;inset:0;overflow:hidden}
+.pstage.markable{cursor:crosshair;touch-action:none;user-select:none}
+.pstage .box{position:absolute;border:2px solid var(--signal);box-shadow:var(--glow-signal);pointer-events:none}
+.pstage .pbox{position:absolute;border:2px solid var(--orbit);background:none;padding:0;cursor:pointer;transition:border-color .25s ease,box-shadow .25s ease}
+.pstage .pbox:hover{border-color:var(--text-muted)}
+.pstage .pbox.ok{border-color:var(--cobalt-text)}
+.pstage .pbox.sel{border-color:var(--signal-hot);box-shadow:var(--glow-signal)}
+.pstage .pbox.far{border-style:dashed;opacity:.55}
+.plabel{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:baseline;gap:6px;padding:1px 8px;background:rgba(6,6,7,.86);border:1px solid var(--orbit);font-family:var(--font-display);font-size:20px;line-height:26px;white-space:nowrap;cursor:pointer;transition:transform .35s var(--ms-spring)}
+.plabel small{font-family:var(--font-mono);font-size:10px;color:var(--text-subtle)}
+.plabel.done{border-color:var(--cobalt-text);color:var(--cobalt-text)}
+.plabel.sug{border-color:var(--amber);color:var(--amber)}
+.plabel.none{color:var(--text-subtle)}
+.plabel.far{opacity:.6;font-size:15px;line-height:20px}
+.plabel.sel{background:var(--signal);border-color:var(--signal);color:var(--on-signal);transform:translate(-50%,-50%) scale(1.12)}
+.plabel.sel small{color:rgba(255,255,255,.8)}
+.lightbox{position:fixed;inset:0;z-index:95;background:rgba(6,6,7,.96);overflow:auto;cursor:zoom-out;display:flex}
+.lightbox img{margin:auto;display:block;max-width:none;width:min(2400px,max(100%,1600px))}
+
+/* ---- tag screen ---- */
+.tag-stage{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:var(--space-6);align-items:start}
+@media (max-width:1000px){.tag-stage{grid-template-columns:1fr}}
+.filmstrip{display:flex;gap:var(--space-2);overflow-x:auto;padding:2px 2px 8px}
+.frame{flex:none;width:104px;background:none;border:0;padding:0;cursor:pointer;color:inherit;text-align:left}
+.frame .ph{aspect-ratio:3/4;width:100%}
+.frame.cur .ph{outline:2px solid var(--signal);outline-offset:-2px}
+.frame.unknown .ph{opacity:.65}
+.frame:hover .ph{outline:1px solid var(--text-muted);outline-offset:-1px}
+.frame .ftags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-family:var(--font-display);font-size:15px;line-height:18px;min-height:18px}
+.ftags .accepted,.ftags .auto{color:var(--cobalt-text)}.ftags .check{color:var(--amber)}.ftags .none{color:var(--text-subtle)}
+.cell .tick{position:absolute;right:6px;top:6px;width:24px;height:24px;border-radius:50%;background:var(--signal);color:var(--on-signal);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:var(--glow-signal)}
+.cell .pct.check{color:var(--amber)}
+.grid.small{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+
+/* ---- overview steps ---- */
+.steps{display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:44px minmax(0,1fr);gap:var(--space-4);padding:var(--space-5) 0;border-bottom:1px solid var(--line)}
+.step .badge{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--orbit);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:20px;color:var(--text-muted)}
+.step.current .badge{border-color:var(--signal);color:var(--text);box-shadow:var(--glow-signal)}
+.step.done .badge{background:var(--text);border-color:var(--text);color:var(--bg)}
+.step.todo{opacity:.5}
+.step .title{font-size:30px}
+.step-body{margin-top:var(--space-4)}
+
+/* ---- status bar (always visible, bottom-left) ---- */
+#statusbar{position:fixed;left:var(--space-4);bottom:var(--space-4);z-index:70;display:flex;align-items:center;gap:var(--space-3);width:min(520px,calc(100vw - 32px));padding:8px 16px 8px 12px;background:var(--surface-raised);box-shadow:inset 0 0 0 1px var(--line-strong);clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px))}
+#statusbar .ms-tag{flex:none}
+.sb-main{min-width:0;flex:1;display:flex;flex-direction:column;gap:5px}
+.sb-msg{font-family:var(--font-mono);font-size:11px;line-height:16px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-subtle)}
+#statusbar.busy{box-shadow:inset 0 0 0 1px var(--signal)}
+#statusbar.busy .sb-msg{color:var(--text)}
+#toasts{left:auto;right:var(--space-6)}
+main{padding-bottom:120px}
+
+/* ---- drop target, tutorial ---- */
+body.dragging::after{content:"";position:fixed;inset:10px;border:2px dashed var(--signal);z-index:100;pointer-events:none}
+.drop.has{border-style:solid;border-color:var(--orbit);color:var(--text)}
+.modal .drop{padding:var(--space-6);font-size:20px;display:flex;flex-direction:column;gap:8px;align-items:center}
+.modal .drop .data{font-size:12px;word-break:break-all}
+.tut-visual{min-height:96px;display:flex;align-items:center}
+.keycaps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;width:100%}
+@media (max-width:700px){.keycaps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.keycap{border:1px solid var(--line-strong);padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.keycap b{font-family:var(--font-display);font-weight:300;font-size:24px;line-height:1}
+.keycap span{font-size:12px;line-height:16px;color:var(--text-subtle)}
+.tdot{width:7px;height:7px;border-radius:50%;background:var(--line-strong);display:block}
+.tdot.on{background:var(--signal);box-shadow:var(--glow-signal)}
+.tut-bib{position:relative;display:inline-block;padding:20px 34px;background:var(--surface-raised);font-family:var(--font-display);font-size:56px;line-height:1}
+.tut-bib .box{position:absolute;inset:8px;border:2px solid var(--signal);box-shadow:var(--glow-signal)}
+
+/* the tagging screen is used with the keyboard: give the photo the room, keep the controls in view */
+body[data-tab="tag"] #banner{display:none}
+body[data-tab="tag"] .event-head{margin-bottom:var(--space-3)}
+body[data-tab="tag"] .event-head h1{font-size:26px}
+body[data-tab="tag"] .event-head .stats{display:none}
+body[data-tab="tag"] .tabs{margin-bottom:var(--space-3)}
+body[data-tab="tag"] main{padding-top:var(--space-5)}
+.tag-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-6)}
+.tag-head .rv-head{flex:1;min-width:320px;flex-wrap:nowrap;gap:var(--space-5)}
+.tag-head .game{gap:var(--space-4)}
+.tag-head .game .g .num{font-size:22px}
+.tag-stage>.panel{position:sticky;top:84px}
+.tag-stage .panel-in{padding:var(--space-5)}
+.tag-stage .panel-in.stack{gap:var(--space-3)}

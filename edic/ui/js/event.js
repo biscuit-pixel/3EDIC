@@ -1,10 +1,13 @@
-// One event: header with live numbers, tabs, and the Photos / Competitors / Number / Find / Export tabs.
-import { t, pad3, fmtTime } from './i18n.js';
-import { h, api, img, crop, clear, Key, Tag, Field, DotBar, Slider, toast, pickFolder, watchJob, burstAt } from './lib.js';
-import { go, S } from './app.js';
-import { renderReview } from './review.js';
+// One event: header with live numbers and the tabs Overview / Check / Tag / Albums / Find / Export.
+import { t, pad3 } from './i18n.js';
+import { h, api, img, clear, Key, Tag, Field, DotBar, Slider, toast, selectFolder, watchJob, burstAt, clearKeys } from './lib.js';
+import { go, reload } from './app.js';
+import { renderOverview } from './workflow.js';
+import { renderCheck } from './review.js';
+import { renderTag } from './tag.js';
+import { renderAlbums } from './albums.js';
 
-const TABS = ['photos', 'roster', 'number', 'review', 'find', 'export'];
+const TABS = ['overview', 'check', 'tag', 'albums', 'find', 'export'];
 
 export async function renderEvent(pid, tab) {
   const project = await api.get(`/api/projects/${pid}`);
@@ -13,13 +16,14 @@ export async function renderEvent(pid, tab) {
   const head = h('div', { class: 'event-head' },
     h('div', { class: 'stack', style: { gap: '8px' } }, h('div', { class: 'ms-caption' }, project.photos_dir), h('h1', null, project.name)),
     h('div', { class: 'stats' },
-      stat(t('stat.photos'), project.photos), stat(t('stat.sorted'), st.resolved_photos), stat(t('stat.check'), st.to_check_pairs), stat(t('stat.unknown'), st.unknown_photos)));
-  const tabs = h('div', { class: 'tabs', role: 'tablist' }, TABS.map((k) => Tag(t('tab.' + k), { pressed: k === tab, onclick: () => go(`e/${pid}/${k}`) })));
+      stat(t('stat.photos'), project.photos), stat(t('stat.sorted'), st.resolved_photos), stat(t('stat.check'), st.to_check_pairs), stat(t('stat.unknown'), st.to_tag)));
+  const tabs = h('div', { class: 'tabs', role: 'tablist' }, TABS.map((k) => Tag(t('tab.' + k), { pressed: (TABS.includes(tab) ? tab : 'overview') === k, onclick: () => go(`e/${pid}/${k}`) })));
   const body = h('div');
   root.append(head, tabs, body);
-  const ctx = { pid, project, body, reload: () => go(`e/${pid}/${tab}`) };
-  const views = { photos: photosTab, roster: rosterTab, number: numberTab, review: renderReview, find: findTab, export: exportTab };
-  body.append(await (views[tab] || photosTab)(ctx));
+  const ctx = { pid, project, body, reload };
+  const views = { overview: renderOverview, check: renderCheck, tag: renderTag, albums: renderAlbums, find: findTab, export: exportTab };
+  clearKeys();
+  body.append(await (views[tab] || renderOverview)(ctx));
   return root;
 }
 
@@ -29,172 +33,6 @@ function stat(label, n) { return h('div', { class: 'stat' }, h('div', { class: '
 async function runningJob(kind, label) {
   const jobs = await api.get('/api/jobs');
   return jobs.find((j) => j.kind === kind && j.state === 'running' && (!label || j.label === label));
-}
-
-// ------------------------------------------------------------------ photos
-async function photosTab({ pid, project, reload }) {
-  const wrap = h('div', { class: 'stack gap-6' });
-  const panel = h('div', { class: 'panel' });
-  const inner = h('div', { class: 'panel-in stack' });
-  panel.append(inner);
-  const bar = DotBar({ value: project.photos ? project.processed / project.photos : 0, n: 60 });
-  bar.classList.add('fill');
-  const jobBox = h('div', { class: 'job hidden' });
-  const jb = DotBar({ n: 60 }); jb.classList.add('fill');
-  const jmsg = h('div', { class: 'data subtle file' });
-  const jeta = h('div', { class: 'ms-caption' });
-  const stop = Key(t('photos.cancel'), { onclick: () => api.post(`/api/jobs/${current.id}/cancel`) });
-  let current = null;
-  jobBox.append(jb, h('div', { class: 'row' }, h('div', { class: 'grow' }, jmsg), jeta, stop));
-
-  const need = project.photos === 0 || project.processed < project.photos;
-  const run = Key(project.photos === 0 ? t('photos.process') : need ? t('photos.process') : t('photos.rescan'), { primary: need, h: 52, onclick: start });
-  async function track(job) {
-    current = job; run.disabled = true; jobBox.classList.remove('hidden');
-    try {
-      const done = await watchJob(job, (j) => {
-        jb.set(j.total ? j.done / j.total : 0); jmsg.textContent = j.message || ''; jeta.textContent = j.eta ? t('photos.eta', { t: fmtTime(j.eta) }) : '';
-      });
-      toast(t('photos.done', { n: done.result?.pairs ?? 0 }));
-      reload();
-    } catch (e) { toast(e.message); run.disabled = false; }
-  }
-  async function start() { try { await track(await api.post(`/api/projects/${pid}/process`)); } catch (e) { toast(e.message); } }
-
-  inner.append(
-    h('div', { class: 'row gap-8' },
-      h('div', null, h('div', { class: 'hero-num' }, pad3(project.photos)), h('div', { class: 'ms-caption' }, t('photos.found'))),
-      h('div', null, h('div', { class: 'hero-num', style: { color: 'var(--text-subtle)' } }, pad3(project.processed)), h('div', { class: 'ms-caption' }, t('photos.processed')))),
-    bar, jobBox, h('div', { class: 'row' }, run, project.processed > 0 && h('span', { class: 'data subtle' }, t('photos.next'))));
-  wrap.append(panel);
-
-  if (project.photos) {
-    const photos = await api.get(`/api/projects/${pid}/photos?limit=48`);
-    wrap.append(h('div', { class: 'grid' }, photos.map((p) => h('div', { class: 'cell', style: { cursor: 'default' } }, h('div', { class: 'ph' }, h('img', { src: img(pid, p.id, 320), loading: 'lazy', alt: p.name }))))));
-  }
-  const live = await runningJob('process', project.name);
-  if (live) track(live);
-  return wrap;
-}
-
-// ------------------------------------------------------------------ roster
-async function rosterTab({ pid, reload }) {
-  const comps = await api.get(`/api/projects/${pid}/competitors`);
-  const suggest = await api.get(`/api/projects/${pid}/roster/suggest`);
-  const area = h('textarea', { class: 'area', placeholder: t('roster.paste.ph'), 'aria-label': t('roster.paste'), spellcheck: 'false' });
-  const add = Key(t('roster.add'), { primary: true, onclick: async () => {
-    if (!area.value.trim()) return;
-    const r = await api.post(`/api/projects/${pid}/competitors/import`, { text: area.value });
-    toast(`${t('common.landed')} +${r.added}`); reload();
-  } });
-  const list = h('div');
-  if (!comps.length) list.append(h('p', { class: 'muted' }, t('roster.empty')));
-  for (const c of comps) {
-    const nm = h('input', { value: c.name, placeholder: t('roster.name.ph'), 'aria-label': t('roster.name.ph') });
-    nm.addEventListener('change', () => api.put(`/api/projects/${pid}/competitors/${c.id}`, { name: nm.value }).then(() => toast(t('common.saved'))));
-    list.append(h('div', { class: 'comp' }, h('span', { class: 'n' }, pad3(c.number)), nm,
-      h('button', { class: 'x', type: 'button', 'aria-label': t('common.delete'), onclick: async () => { await api.del(`/api/projects/${pid}/competitors/${c.id}`); reload(); } }, '×')));
-  }
-  return h('div', { class: 'cols side' },
-    h('div', { class: 'stack' },
-      h('div', { class: 'panel' }, h('div', { class: 'panel-in stack' }, h('div', { class: 'ms-caption' }, t('roster.paste')), area, h('p', { class: 'data subtle' }, t('roster.paste.hint')), h('div', null, add))),
-      suggest.length > 0 && h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('roster.suggest')),
-        h('div', { class: 'tags' }, suggest.slice(0, 40).map((s) => Tag(`${pad3(s.number)} · ${t('roster.suggest.n', { n: s.photos })}`, { onclick: async () => { await api.post(`/api/projects/${pid}/competitors`, { number: s.number }); reload(); } })))))),
-    h('div', { class: 'panel' }, h('div', { class: 'panel-in' }, h('div', { class: 'row', style: { marginBottom: '8px' } }, h('div', { class: 'title grow' }, t('roster.title')), h('div', { class: 'ms-caption' }, t('roster.count', { n: comps.length }))), list)));
-}
-
-// ------------------------------------------------------------------ number
-async function numberTab({ pid, project, reload }) {
-  const cal = await api.get(`/api/projects/${pid}/calibration`);
-  const wrap = h('div', { class: 'stack gap-6' });
-  const stage = h('div', { class: 'stack' });
-  const need = Math.max(0, 2 - cal.examples.length);
-  const status = h('div', { class: 'row wrap' },
-    cal.profile ? Tag(t('num.learned'), { kind: 'cobalt' }) : Tag(t('num.need', { n: need }), { kind: 'amber' }),
-    cal.examples.length > 0 && h('div', { class: 'tags' }, cal.examples.map((e) => Tag(e.number != null ? pad3(e.number) : '·'))),
-    cal.examples.length > 0 && Key(t('num.reset'), { h: 36, onclick: async () => { await api.del(`/api/projects/${pid}/calibration`); reload(); } }));
-  const applyBar = DotBar({ n: 48 }); applyBar.classList.add('fill', 'hidden');
-  const apply = Key(t('num.apply'), { primary: !!cal.profile, disabled: !cal.profile, h: 48, onclick: async () => {
-    apply.disabled = true; applyBar.classList.remove('hidden');
-    try {
-      const job = await api.post(`/api/projects/${pid}/calibration/apply`);
-      await watchJob(job, (j) => applyBar.set(j.total ? j.done / j.total : 0));
-      toast(t('common.landed')); reload();
-    } catch (e) { toast(e.message); apply.disabled = false; }
-  } });
-
-  const picker = h('div', { class: 'grid', style: { gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' } });
-  if (!cal.suggested_photos.length) picker.append(h('p', { class: 'muted' }, t('num.none')));
-  cal.suggested_photos.forEach((id) => {
-    const cell = h('button', { class: 'cell', type: 'button', onclick: () => { picker.querySelectorAll('.cell').forEach((c) => c.classList.remove('sel')); cell.classList.add('sel'); openMarker(id); } },
-      h('div', { class: 'ph' }, h('img', { src: img(pid, id, 320), alt: '', loading: 'lazy' })));
-    picker.append(cell);
-  });
-
-  async function openMarker(photoId) {
-    const d = await api.get(`/api/projects/${pid}/photos/${photoId}`);
-    const people = d.persons.filter((p) => p.hip).sort((a, b) => (b.box[3] - b.box[1]) - (a.box[3] - a.box[1]));
-    clear(stage);
-    if (!people.length) { stage.append(h('p', { class: 'muted' }, t('num.none'))); return; }
-    const hip = people[0].hip, cx = (hip[0] + hip[2]) / 2, cy = (hip[1] + hip[3]) / 2;
-    const hw = (hip[2] - hip[0]) * 0.85, hh = (hip[3] - hip[1]) * 1.2;
-    const reg = [Math.max(0, cx - hw), Math.max(0, cy - hh), Math.min(d.width, cx + hw), Math.min(d.height, cy + hh)];
-    const im = h('img', { src: crop(pid, photoId, reg, 1000), alt: '', draggable: 'false' });
-    const rectEl = h('div', { class: 'box hidden' });
-    const st = h('div', { class: 'mark-stage', tabindex: 0 }, im, rectEl);
-    let rect = null, start = null;
-    const rel = (e) => { const b = im.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; };
-    const draw = () => {
-      if (!rect) return;
-      Object.assign(rectEl.style, { left: rect[0] * 100 + '%', top: rect[1] * 100 + '%', width: (rect[2] - rect[0]) * 100 + '%', height: (rect[3] - rect[1]) * 100 + '%' });
-      rectEl.classList.remove('hidden');
-    };
-    st.addEventListener('pointerdown', (e) => { st.setPointerCapture(e.pointerId); start = rel(e); rect = [...start, ...start]; draw(); });
-    st.addEventListener('pointermove', (e) => { if (!start) return; const p = rel(e); rect = [Math.min(start[0], p[0]), Math.min(start[1], p[1]), Math.max(start[0], p[0]), Math.max(start[1], p[1])]; draw(); });
-    st.addEventListener('pointerup', () => { start = null; });
-    const num = Field({ label: t('num.number'), id: 'bibno', maxlength: 4, inputmode: 'numeric', onEnter: () => save.click() });
-    const save = Key(t('num.save'), { primary: true, onclick: async () => {
-      if (!rect || rect[2] - rect[0] < 0.02) { toast(t('num.draw')); return; }
-      const W = reg[2] - reg[0], H = reg[3] - reg[1];
-      const box = [reg[0] + rect[0] * W, reg[1] + rect[1] * H, reg[0] + rect[2] * W, reg[1] + rect[3] * H];
-      try { await api.post(`/api/projects/${pid}/calibration/example`, { photo_id: photoId, number: num.value ? +num.value : null, box }); toast(t('common.landed')); reload(); }
-      catch (e) { toast(e.message); }
-    } });
-    stage.append(h('div', { class: 'ms-caption' }, t('num.draw')), st, h('div', { class: 'row top-a' }, h('div', { style: { width: '160px' } }, num.el), save));
-    num.input.focus();
-  }
-
-  wrap.append(
-    h('div', { class: 'stack' }, h('h2', { class: 'title' }, t('num.title')), h('p', { class: 'muted' }, t('num.body'))),
-    h('div', { class: 'cols side' },
-      h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('num.pick')), picker)),
-      h('div', { class: 'panel raised' }, h('div', { class: 'panel-in stack' }, status, stage))),
-    h('div', { class: 'stack' }, applyBar, h('div', null, apply)),
-    await vlmPanel(pid));
-  return wrap;
-}
-
-async function vlmPanel(pid) {
-  const provider = S.system.settings.vlm_provider;
-  const hasKey = provider && S.system.vlm_keys[provider];
-  const inner = h('div', { class: 'panel-in stack' }, h('div', { class: 'title' }, t('num.vlm.title')), h('p', { class: 'muted' }, t('num.vlm.body')));
-  if (!hasKey) {
-    inner.append(h('p', { class: 'data subtle' }, t('num.vlm.off')), h('div', null, Key(t('nav.settings'), { onclick: () => go('settings') })));
-  } else {
-    const est = await api.get(`/api/projects/${pid}/vlm/estimate?provider=${provider}`);
-    const bar = DotBar({ n: 48 }); bar.classList.add('fill', 'hidden');
-    const msg = h('div', { class: 'data subtle' });
-    const run = Key(t('num.vlm.run'), { primary: est.crops > 0, disabled: est.crops === 0, onclick: async () => {
-      run.disabled = true; bar.classList.remove('hidden');
-      try {
-        const job = await api.post(`/api/projects/${pid}/vlm/run`);
-        const done = await watchJob(job, (j) => { bar.set(j.total ? j.done / j.total : 0); msg.textContent = j.message; });
-        toast(t('num.vlm.found', { n: done.result?.numbers_found ?? 0 })); go(`e/${pid}/number`);
-      } catch (e) { toast(e.message); run.disabled = false; }
-    } });
-    inner.append(h('div', { class: 'row' }, Tag(provider), h('span', { class: 'data subtle' }, t('num.vlm.estimate', { n: est.crops, c: est.approx_cost_usd.toFixed(2) }))), bar, msg, h('div', null, run));
-  }
-  return h('div', { class: 'panel' }, inner);
 }
 
 // -------------------------------------------------------------------- find
@@ -246,13 +84,13 @@ async function findTab({ pid }) {
       selectShown.onclick = () => { shown.forEach((m) => selected.add(m.photo_id)); draw(); };
     };
     const selectShown = Key(t('find.select'), { h: 40 });
-    const compSel = h('select', { class: 'ms-select', 'aria-label': t('find.assign') }, comps.map((c) => h('option', { value: c.id }, `${pad3(c.number)} ${c.name}`)));
+    const compSel = h('select', { class: 'ms-select', 'aria-label': t('find.assign') }, comps.map((c) => h('option', { value: c.id }, `${c.label} ${c.name}`)));
     results.append(
       h('div', { class: 'row wrap gap-6' }, h('div', { style: { width: '260px' } }, Slider({ label: t('find.strict'), min: Math.min(lo, 45), max: 100, value: thr, onchange: (v) => { thr = v; draw(); }, format: (v) => String(v) })), count, h('div', { class: 'grow' }), sel),
       h('div', { class: 'row wrap' }, selectShown,
         Key(t('find.export'), { primary: true, onclick: async () => {
           if (!selected.size) return;
-          const dest = await pickFolder({ title: t('find.pickdest') }); if (!dest) return;
+          const dest = await selectFolder({ title: t('find.pickdest') }); if (!dest) return;
           try { const job = await api.post(`/api/projects/${pid}/find/export`, { photo_ids: [...selected], dest }); await watchJob(job); toast(t('common.landed')); } catch (e) { toast(e.message); }
         } }),
         comps.length > 0 && [compSel, Key(t('find.assign'), { onclick: async () => {
@@ -298,7 +136,7 @@ async function exportTab({ pid, project }) {
     total.textContent = pad3(p.files);
     clear(plan);
     if (!p.folders.length) plan.append(h('p', { class: 'muted' }, t('export.noneyet')));
-    for (const f of p.folders) plan.append(h('div', { class: 'r' }, h('span', { style: f.name === '_unsorted' ? { color: 'var(--text-subtle)' } : null }, f.name === '_unsorted' ? t('export.unsorted') : f.name), h('span', { class: 'data subtle' }, t('export.files', { n: f.count }))));
+    for (const f of p.folders) plan.append(h('div', { class: 'r' }, h('span', { style: f.name === '_unsorted' ? { color: 'var(--text-subtle)' } : null }, f.name === '_unsorted' ? t('export.unsorted') : f.name === 'Others' ? t('album.others') : f.name), h('span', { class: 'data subtle' }, t('export.files', { n: f.count }))));
   }
   const tpl = Field({ label: t('export.template'), value: cfg.template, id: 'tpl', maxlength: 60, onInput: (v) => { cfg.template = v; } });
   tpl.input.addEventListener('change', () => save('folder_template', cfg.template));
@@ -323,5 +161,5 @@ async function exportTab({ pid, project }) {
         h('div', { class: 'row' }, h('div', { class: 'title grow' }, t('export.preview')), total), plan)),
       h('div', { class: 'panel' }, h('div', { class: 'panel-in stack' },
         h('div', { class: 'ms-caption' }, t('export.dest')), destEl,
-        h('div', { class: 'row' }, Key(t('export.pick'), { onclick: async () => { const d = await pickFolder({ title: t('export.pick') }); if (d) { cfg.dest = d; destEl.textContent = d; go_.disabled = false; } } }), go_), bar))));
+        h('div', { class: 'row' }, Key(t('export.pick'), { onclick: async () => { const d = await selectFolder({ title: t('export.pick') }); if (d) { cfg.dest = d; destEl.textContent = d; go_.disabled = false; } } }), go_), bar))));
 }

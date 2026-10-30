@@ -269,3 +269,13 @@ def test_variant_albums_get_no_anchors_from_read_numbers():
     inp = scoring.ScoreInput(persons=[[p]], times=np.array([0.0]), roster=[41, 41], variants=[1, 2], ocr_min_number=10)
     f_num, *_ = scoring.features(inp, scoring.VARIANTS["basic"], "sface")
     assert f_num[0, 0] > 0 and f_num[0, 1] == 0                           # the read number anchors album 41, never 41_2
+
+
+def test_bulk_tag_of_a_single_subject_drops_the_models_other_guesses(project):
+    rv = Review(project)
+    ph = pid(project, 1)
+    c41, c42 = comp_id(project, 41), comp_id(project, 42)
+    project.con.execute("INSERT INTO assignments(photo_id,competitor_id,person_idx,p,status) VALUES(?,?,0,0.4,'suggested')", (ph, c42))
+    rv.bulk_tag([{"photo_id": ph}], c41)
+    rows = {r["competitor_id"]: r["status"] for r in project.con.execute("SELECT competitor_id,status FROM assignments WHERE photo_id=?", (ph,))}
+    assert rows[c41] == "accepted" and rows.get(c42) == "rejected"
