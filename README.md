@@ -20,6 +20,30 @@ You point 3EDIČ at a folder of photos from a competition (or a conference). It 
 
 Optional: send small crops of the hip area (never faces, never whole photos) to a vision LLM (Claude, ChatGPT or Gemini, with your own API key) to read numbers the local OCR could not.
 
+## Screenshots
+
+The demo event below is generated (cartoon figures, invented numbers and names), so no real person appears here.
+
+**Show a few numbers.** Before the long analysis, drag a box around a number on a couple of photos and type it. Two examples are enough to teach 3EDIČ where numbers sit on your event.
+
+<img src="docs/screenshots/1-show-a-few-numbers.png" alt="Dragging a box around a number on a photo" width="860">
+
+**Tag what is left.** One photo with its neighbours in shooting order and what they are tagged as. Click a person, type the number, press Enter; a photo with several people stays until everyone is tagged.
+
+<img src="docs/screenshots/4-tag.png" alt="Tag screen: a photo with two people, the neighbouring photos below, number field on the right" width="860">
+
+**Check.** Per competitor, a grid of photos that are probably theirs. Click the ones that do not match; the rest is confirmed.
+
+<img src="docs/screenshots/3-check.png" alt="Check grid for one competitor, one thumbnail marked as wrong" width="860">
+
+**Albums.** One per number, with names if you gave them.
+
+<img src="docs/screenshots/5-albums.png" alt="Album overview with covers, names and progress" width="860">
+
+Open an album to rename or renumber it, merge it with another, split off a different person with the same number, or take wrong photos out.
+
+<img src="docs/screenshots/6-album.png" alt="One album open: number and name fields, selectable photos" width="860">
+
 ## The workflow
 
 An event is five steps on one **Overview** screen, the current one open:
@@ -117,7 +141,7 @@ edic/find.py     find one person across all photos by face
 edic/models/     download manager + registry (sha256, mirrors, licence gate)
 edic/vlm/        optional AI helper (Anthropic, OpenAI, Gemini over plain HTTPS)
 edic/api.py      FastAPI; edic/ui/ is the UI (vanilla JS, møušn design system)
-tools/           research and maintenance scripts (fit_combiner, import_legacy, gen_tokens)
+tools/           research and maintenance scripts (fit_combiner, import_legacy, gen_tokens, demo_screens = the README screenshots)
 tests/           pytest suite (synthetic data); tests/live/ needs the dataset, network or a browser
 ```
 
