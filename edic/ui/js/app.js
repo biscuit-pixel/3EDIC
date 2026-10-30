@@ -1,6 +1,6 @@
 // 3EDIČ — entry point: router, shell, home, first-run setup and settings.
 import { t, setLang, getLang, pad3, fmtTime } from './i18n.js';
-import { h, api, clear, Key, Tag, Field, Check, Orbit, DotBar, Slider, toast, modal, selectFolder, hasNativePicker, watchJob, debounce, clearKeys, $ } from './lib.js';
+import { h, api, clear, Credit, Key, Tag, Field, Check, Orbit, DotBar, Slider, toast, modal, selectFolder, hasNativePicker, watchJob, debounce, clearKeys, $ } from './lib.js';
 import { showTutorial } from './tutorial.js';
 import { renderEvent } from './event.js';
 
@@ -126,7 +126,8 @@ function shell(r) {
           S.system.ready && Tag(t('nav.help'), { onclick: () => showTutorial(), title: t('tutorial.title') }),
           ['en', 'sk'].map((l) => Tag(l.toUpperCase(), { pressed: getLang() === l, onclick: () => changeLang(l) })))),
       h('div', { id: 'banner' }),
-      h('main', { id: 'view' }));
+      h('main', { id: 'view' }),
+      h('footer', { class: 'foot' }, Credit()));
   }
 }
 
@@ -418,7 +419,8 @@ async function settingsView() {
         arc && h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('settings.arc')), arcState)),
         h('div', { class: 'panel' }, h('div', { class: 'panel-in sect' }, h('div', { class: 'ms-caption' }, t('settings.ai')), provRow, keyBox)),
         upPanel)),
-    h('p', { class: 'data subtle' }, t('settings.about')));
+    h('div', { class: 'panel' }, h('div', { class: 'panel-in stack' }, h('div', { class: 'ms-caption' }, t('settings.aboutapp')),
+      h('div', { class: 'row wrap' }, Credit({ size: 34 })), h('p', { class: 'data subtle' }, `3EDIČ ${sys.version} · AGPL-3.0`), h('p', { class: 'data subtle' }, t('settings.about')))));
 }
 
 installDrop();

@@ -53,4 +53,4 @@ coll = COLLECT(*exes, a.binaries, a.datas, strip=False, upx=False, name="3EDIC")
 if sys.platform == "darwin":
     app = BUNDLE(coll, name="3EDIC.app", icon=icon_icns, bundle_identifier="app.edic.desktop",
                  info_plist={"CFBundleDisplayName": "3EDIČ", "CFBundleName": "3EDIC", "NSHighResolutionCapable": True,
-                             "LSMinimumSystemVersion": "11.0", "NSHumanReadableCopyright": "AGPL-3.0"})
+                             "LSMinimumSystemVersion": "11.0", "NSHumanReadableCopyright": "Made by møušn · AGPL-3.0"})

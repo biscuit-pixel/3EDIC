@@ -351,3 +351,10 @@ export function bindKeys(handler) {
   document.addEventListener('keydown', handler);
   offKeys = () => document.removeEventListener('keydown', handler);
 }
+
+/** The møušn wordmark, built the way the design system does it: the ø is an o with the red slash across it. */
+export function MousnLogo({ size = 22 } = {}) {
+  return h('span', { class: 'ms-logo', role: 'img', 'aria-label': 'møušn', style: { fontSize: size + 'px' } }, 'm', h('span', { class: 'ms-o', 'aria-hidden': 'true' }, 'o', h('span', { class: 'ms-slash' })), 'ušn');
+}
+/** "Made by møušn", for the foot of every page and the Settings panel. */
+export const Credit = ({ size = 20 } = {}) => h('div', { class: 'credit' }, h('span', { class: 'ms-caption' }, t('about.made')), MousnLogo({ size }));

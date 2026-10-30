@@ -139,7 +139,3 @@ pytest -q                        # about 90 tests, synthetic data, a few seconds
 - **Other events.** Accuracy was measured on one event with one numbering style (round tags on the hip). Running and cycling bibs on the chest need a different OCR region.
 - **Pose resolution.** Pose runs at 640 px, as in the measurements. Small people in wide shots are often missed; a higher-resolution pass is an obvious next step.
 - **Large events.** Persons and embeddings are held in memory (about 3 KB per person); 10,000 photos should be fine, 100,000 has not been tried.
-
-## Brand
-
-The UI follows the møušn design system (dark chassis, one red signal colour, Bitcount / Bricolage Grotesque / Martian Mono, 45° cut corners, dotted tracks). The 3EDIČ wordmark is plain Bitcount Prop Single at weight 370 as a placeholder; the red slash belongs to the møušn logo and is not used here.

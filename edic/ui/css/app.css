@@ -317,3 +317,7 @@ body[data-tab="tag"] main{padding-top:var(--space-5)}
 .tag-stage>.panel{position:sticky;top:84px}
 .tag-stage .panel-in{padding:var(--space-5)}
 .tag-stage .panel-in.stack{gap:var(--space-3)}
+
+/* credit */
+.credit{display:inline-flex;align-items:center;gap:var(--space-3)}
+.foot{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:0 var(--space-8) 72px;display:flex;justify-content:flex-end}

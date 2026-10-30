@@ -11,6 +11,7 @@ export const STRINGS = {
     'common.on': 'on', 'common.off': 'off', 'common.apply': 'Apply', 'common.open': 'Open', 'common.working': 'Working…',
 
     'common.stop': 'Stop',
+    'about.made': 'Made by', 'settings.aboutapp': 'About',
     'nav.help': 'How it works',
     'tab.overview': 'Overview', 'tab.check': 'Check', 'tab.tag': 'Tag', 'tab.albums': 'Albums',
     'stat.unknown': 'To tag',
@@ -209,6 +210,7 @@ export const STRINGS = {
     'common.on': 'zapnuté', 'common.off': 'vypnuté', 'common.apply': 'Použiť', 'common.open': 'Otvoriť', 'common.working': 'Pracujem…',
 
     'common.stop': 'Zastaviť',
+    'about.made': 'Vytvoril', 'settings.aboutapp': 'O aplikácii',
     'nav.help': 'Ako to funguje',
     'tab.overview': 'Prehľad', 'tab.check': 'Kontrola', 'tab.tag': 'Tagovanie', 'tab.albums': 'Albumy',
     'stat.unknown': 'Na označenie',
