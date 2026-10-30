@@ -98,15 +98,19 @@ with sync_playwright() as p:
     ph0 = pr.photos()[0]["id"]
     d = api(f"/api/projects/{pid}/photos/{ph0}")
     check("both people of photo 1 are in their own albums", [a["label"] for p_ in d["persons"] for a in p_["assigned"]] == ["012", "013"], str([a["label"] for p_ in d["persons"] for a in p_["assigned"]]))
+    val = lambda: page.locator("#whoNo").input_value()
+    check("the next photo suggests the numbers typed on the previous one", val() == "12", val())
     page.keyboard.press("Tab"); settle(400)
-    check("Tab switches person", page.locator(".pstage .pbox.sel").count() == 1)
-    page.keyboard.press("-"); settle(1000)
+    check("Tab switches person, and the suggestion follows left-to-right order", page.locator(".pstage .pbox.sel").count() == 1 and val() == "13", val())
+    page.keyboard.press("Tab"); settle(400)
+    page.keyboard.press("Enter"); settle(1000)                              # keeps the suggested 12 for the first person
+    check("Enter keeps the suggested number and moves to the other person", val() == "13", val())
+    page.keyboard.press("-"); settle(1000)                                   # the second person is not a competitor
     others = [a for a in api(f"/api/projects/{pid}/review/album") if a["kind"] == "others"]
-    check("- puts the selected person in Others", len(others) == 1 and others[0]["confirmed"] == 1, str(api(f"/api/projects/{pid}/review/album")))
+    check("- puts the selected person in Others", len(others) == 1 and others[0]["confirmed"] == 1)
     page.screenshot(path=f"{out}/{lang}-v2-multi-3.png")
-    # group photo: every tagged person's album gets the photo
     alb = {a["label"]: a for a in api(f"/api/projects/{pid}/review/album")}
-    check("a group photo appears in each person's album", alb["012"]["confirmed"] == 1 and alb["013"]["confirmed"] == 1)
+    check("a group photo appears in each person's album", alb["012"]["confirmed"] == 2 and alb["013"]["confirmed"] == 1, str({k: v["confirmed"] for k, v in alb.items()}))
     print("\n".join(errors) if errors else "ALL OK")
     b.close()
 srv.stop()

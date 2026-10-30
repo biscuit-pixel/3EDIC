@@ -54,7 +54,7 @@ An event is five steps on one **Overview** screen, the current one open:
 4. **AI helper** (optional) — Claude, ChatGPT or Gemini read the numbers the local OCR could not, with your own key. The cost is shown first.
 5. **Check and tag** — *Check* confirms what is probably right in one grid per competitor; *Tag* shows each remaining photo with its neighbours in shooting order (4 before and after by default, configurable) and every person boxed. Click a person, type the number, press Enter; a photo with several people stays until all are tagged.
 
-Keys on the Tag screen: `←` back, `→` next, `↑` yes (accept the suggestion), `↓` no, digits + `Enter` tag, `-` not a competitor (goes to the *Others* album), `Tab` next person, `Ctrl Z` undo, `+` zoom. *Many at once* shows the list as a grid: select a burst (Shift for a range), type one number.
+Keys on the Tag screen: `←` back, `→` next, `↑` yes (accept the suggestion), `↓` no, digits + `Enter` tag, `-` not a competitor (goes to the *Others* album), `Tab` next person, `Ctrl Z` undo, `+` zoom. The number you typed on the previous photo is suggested on the next one (left to right on group shots): Enter keeps it, typing replaces it, so a burst of one person is a row of Enters. *Many at once* shows the list as a grid: select a burst (Shift for a range), type one number.
 
 **Albums** are one per number: rename, renumber (onto an existing number you choose between merging and keeping both as `056` and `056_2`), split off a look-alike number, take wrong photos out (they go back to tagging, to *Others* or to another number), delete empty albums. A group photo is in the album of everyone tagged on it. A status bar in the bottom-left corner always shows what is running and on which device.
 

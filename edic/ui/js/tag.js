@@ -36,6 +36,7 @@ async function singleView(ctx, head) {
   const host = h('div');
   let queue = [], reason = new Map(), history = [];
   let curId = null, detail = null, frames = [], sel = null, input = null, busy = false;
+  let curCarry = null, prevCarry = { entries: [] };     // numbers the user gave on this photo / on the one before: bursts of one person are tagged in a row
 
   const loadQueue = async () => {
     const q = await api.get(`/api/projects/${pid}/review/queue`);
@@ -66,6 +67,7 @@ async function singleView(ctx, head) {
   }
   async function show(id) {
     if (id == null) { clear(host).append(done(ctx, queue.length)); return; }
+    if (curCarry && curCarry.photo !== id) { prevCarry = curCarry; curCarry = null; }          // moving on: what was typed becomes the suggestion
     await load(id);
     sel = pickPerson();
     draw();
@@ -97,6 +99,7 @@ async function singleView(ctx, head) {
     if (!(n >= 1 && n <= 9999)) { toast(t('tag.badnumber')); return; }
     if (detail.persons.length) await api.post(`/api/projects/${pid}/review/person`, { photo_id: curId, person_idx: sel, number: n });
     else await api.post(`/api/projects/${pid}/review/bulk-tag`, { photo_ids: [curId], number: n });
+    remember(n);
     burst(innerWidth / 2, innerHeight / 2, { n: 10 });
     await tagged();
   });
@@ -106,10 +109,27 @@ async function singleView(ctx, head) {
     await tagged();
   });
   const person = () => detail.persons.find((p) => p.idx === sel);
+  const remember = (n) => {
+    if (!(n >= 1)) return;
+    if (!curCarry || curCarry.photo !== curId) curCarry = { photo: curId, entries: [] };
+    const p = person();
+    curCarry.entries = curCarry.entries.filter((e) => e.idx !== sel);
+    curCarry.entries.push({ idx: sel, x: p ? (p.box[0] + p.box[2]) / 2 : 0, number: n });
+  };
+  /** The number typed for the same person on the previous photo: left-to-right order on a group shot, the latest one for a single subject. */
+  const fromPrevious = (p) => {
+    const entries = [...prevCarry.entries].sort((a, b) => a.x - b.x);
+    if (!entries.length) return null;
+    const sig = detail.persons.filter(significant).sort((a, b) => (a.box[0] + a.box[2]) - (b.box[0] + b.box[2]));
+    const rank = p ? sig.findIndex((q) => q.idx === p.idx) : -1;
+    if (sig.length <= 1 || rank < 0) return sig.length > 1 ? null : entries[entries.length - 1].number;
+    return entries[rank]?.number ?? null;
+  };
   const topSuggestion = () => [...(person()?.suggested || [])].sort((a, b) => b.p - a.p)[0];
   const accept = (s) => act(async () => {
     const c = s.competitor;
     await api.post(`/api/projects/${pid}/review/person`, { photo_id: curId, person_idx: sel, competitor_id: c.id, number: c.number || 1, others: c.kind === 'others' });
+    if (c.kind !== 'others') remember(c.number);
     await tagged();
   });
   const yes = () => { const s = topSuggestion(); if (s) accept(s); else toast(t('tag.nosuggestion')); };
@@ -157,7 +177,8 @@ async function singleView(ctx, head) {
     const p = person();
     const sug = [...(p?.suggested || [])].sort((a, b) => b.p - a.p).slice(0, 4);
     const inQueue = queue.indexOf(curId);
-    input = Field({ placeholder: '041', id: 'whoNo', maxlength: 4, inputmode: 'numeric', autofocus: true,
+    const prev = p && p.assigned.length ? null : fromPrevious(p);
+    input = Field({ placeholder: '041', id: 'whoNo', value: prev ? String(prev) : '', maxlength: 4, inputmode: 'numeric', autofocus: true,
       onEnter: (v) => { v = v.trim(); if (!v) { if (topSuggestion()) yes(); return; } tagNumber(parseInt(v, 10)); } });
     input.input.addEventListener('keydown', (e) => { if (e.key === '-') { e.preventDefault(); tagOthers(); } });
     input.input.addEventListener('input', () => { input.input.value = input.input.value.replace(/\D/g, ''); });
@@ -171,12 +192,13 @@ async function singleView(ctx, head) {
           h('div', { class: 'tags' }, detail.persons.filter(significant).map((q, i) => Tag(`${i + 1} · ${labelOf(q).text}`, { pressed: q.idx === sel, kind: resolved(q) ? 'cobalt' : '', onclick: () => { sel = q.idx; draw(); } })))),
         sug.length > 0 && h('div', { class: 'stack', style: { gap: '8px' } }, h('div', { class: 'ms-caption' }, t('tag.confidence')),
           h('div', { class: 'tags' }, sug.map((s) => Tag(`${s.competitor.label} · ${pct(s.p)}`, { onclick: () => accept(s), title: t('tag.confidence') })))),
+        prev && h('div', { class: 'stack', style: { gap: '8px' } }, h('div', { class: 'ms-caption' }, t('tag.prev')), h('div', { class: 'tags' }, Tag(`${pad3(prev)} ↵`, { kind: 'cobalt', onclick: () => tagNumber(prev), title: t('tag.prev.hint') }))),
         h('div', { class: 'title' }, t('tag.q')), input.el,
         h('div', { class: 'row wrap' }, yesKey, Key(t('review.no'), { disabled: !sug.length, legend: '↓', h: 44, onclick: no }), Key(t('tag.others'), { legend: '-', h: 44, onclick: tagOthers })),
         h('div', { class: 'row wrap' }, Key(t('common.back'), { legend: '<', h: 36, disabled: !history.length, onclick: back }), Key(t('common.next'), { legend: '>', h: 36, onclick: forward }),
           Key(t('common.undo'), { legend: 'Ctrl Z', h: 36, onclick: undo }), Key(t('tag.zoom'), { legend: '+', h: 36, onclick: zoom })),
         h('p', { class: 'data subtle' }, t('tag.keys'))))));
-    requestAnimationFrame(() => input.input.focus());
+    requestAnimationFrame(() => { input.input.focus(); input.input.select(); });         // a suggested number is selected: Enter keeps it, typing replaces it
   }
 
   bindKeys((e) => {
