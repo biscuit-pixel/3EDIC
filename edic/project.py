@@ -26,6 +26,7 @@ DEFAULTS = {
     "folder_template": "{number:03d}",   # also {name}
     "export_mode": "copy",      # copy | hardlink | symlink
     "ocr_min_number": 10,
+    "roster_mode": "auto",      # auto: albums appear for numbers found | list: only the start list (plus manual tagging)
 }
 
 
@@ -91,7 +92,7 @@ class Project:
         q = lambda s: self.con.execute(s).fetchone()[0]
         return {"id": self.id, "name": self.get_meta("name"), "photos_dir": self.get_meta("photos_dir"),
                 "photos": q("SELECT COUNT(*) FROM photos"), "processed": q("SELECT COUNT(*) FROM photos WHERE processed=1"),
-                "competitors": q("SELECT COUNT(*) FROM competitors"),
+                "competitors": q("SELECT COUNT(*) FROM competitors WHERE kind='competitor'"),
                 "accepted": q("SELECT COUNT(*) FROM assignments WHERE status='accepted'"),
                 "created": self.get_meta("created")}
 
@@ -145,12 +146,25 @@ class Project:
     def photos(self):
         return [dict(r) for r in self.con.execute("SELECT * FROM photos ORDER BY taken, name")]
 
-    # ----------------------------------------------------------- competitors
+    # ---------------------------------------------------------------- albums
+    @staticmethod
+    def label(number: int, variant: int = 1, kind: str = "competitor") -> str:
+        """056, 056_2 (a second, different competitor with the same number) or Others."""
+        if kind == "others":
+            return "Others"
+        return f"{number:03d}" + (f"_{variant}" if variant > 1 else "")
+
     @locked
-    def add_competitor(self, number: int, name: str = "") -> int:
-        self.con.execute("INSERT INTO competitors(number,name) VALUES(?,?) ON CONFLICT(number) DO UPDATE SET name=CASE WHEN excluded.name<>'' THEN excluded.name ELSE name END",
-                         (number, name))
-        return self.con.execute("SELECT id FROM competitors WHERE number=?", (number,)).fetchone()["id"]
+    def add_competitor(self, number: int, name: str = "", variant: int = 1, kind: str = "competitor") -> int:
+        """Get or create an album; a given name replaces an empty one."""
+        self.con.execute("INSERT INTO competitors(number,variant,name,kind) VALUES(?,?,?,?) ON CONFLICT(number,variant) DO UPDATE SET "
+                         "name=CASE WHEN excluded.name<>'' THEN excluded.name ELSE name END", (number, variant, name, kind))
+        return self.con.execute("SELECT id FROM competitors WHERE number=? AND variant=?", (number, variant)).fetchone()["id"]
+
+    @locked
+    def others_album(self) -> int:
+        """The album for people who are not competitors (organisers, audience, staff)."""
+        return self.add_competitor(0, "Others", 1, "others")
 
     @locked
     def set_roster(self, entries):
@@ -160,28 +174,120 @@ class Project:
             self.add_competitor(n, name)
 
     @locked
-    def competitors(self):
-        return [dict(r) for r in self.con.execute("SELECT * FROM competitors ORDER BY number")]
+    def competitors(self, include_others: bool = False):
+        rows = self.con.execute("SELECT * FROM competitors" + ("" if include_others else " WHERE kind='competitor'") + " ORDER BY kind, number, variant").fetchall()
+        return [{**dict(r), "label": self.label(r["number"], r["variant"], r["kind"])} for r in rows]
+
+    @locked
+    def next_variant(self, number: int) -> int:
+        r = self.con.execute("SELECT MAX(variant) AS v FROM competitors WHERE number=?", (number,)).fetchone()
+        return (r["v"] or 0) + 1
+
+    @locked
+    def update_album(self, album_id: int, number: int | None = None, name: str | None = None, merge: bool = False) -> dict:
+        """Rename and/or renumber an album. Renumbering onto an existing album either merges the two or, when the
+        same number belongs to a different competitor (another category), makes this one 56_2, 56_3, ..."""
+        row = self.con.execute("SELECT * FROM competitors WHERE id=? AND kind='competitor'", (album_id,)).fetchone()
+        if not row:
+            raise KeyError(album_id)
+        if name is not None:
+            self.con.execute("UPDATE competitors SET name=? WHERE id=?", (name, album_id))
+        result = {"id": album_id}
+        if number is not None and number != row["number"]:
+            other = self.con.execute("SELECT id FROM competitors WHERE number=? AND variant=1 AND kind='competitor'", (number,)).fetchone()
+            if other and merge:
+                self.merge_albums(album_id, other["id"])
+                return {"id": other["id"], "merged_into": other["id"]}
+            variant = self.next_variant(number) if other else 1
+            self.con.execute("UPDATE competitors SET number=?, variant=? WHERE id=?", (number, variant, album_id))
+        return result
+
+    @locked
+    def merge_albums(self, src: int, dst: int):
+        """Move everything from album src into album dst and delete src."""
+        self.con.execute("BEGIN")
+        for r in self.con.execute("SELECT * FROM assignments WHERE competitor_id=?", (src,)).fetchall():
+            clash = self.con.execute("SELECT status,p FROM assignments WHERE photo_id=? AND competitor_id=?", (r["photo_id"], dst)).fetchone()
+            if clash is None:
+                self.con.execute("UPDATE assignments SET competitor_id=? WHERE photo_id=? AND competitor_id=?", (dst, r["photo_id"], src))
+            else:
+                better = r["status"] == "accepted" and clash["status"] != "accepted"
+                if better:
+                    self.con.execute("DELETE FROM assignments WHERE photo_id=? AND competitor_id=?", (r["photo_id"], dst))
+                    self.con.execute("UPDATE assignments SET competitor_id=? WHERE photo_id=? AND competitor_id=?", (dst, r["photo_id"], src))
+                else:
+                    self.con.execute("DELETE FROM assignments WHERE photo_id=? AND competitor_id=?", (r["photo_id"], src))
+        self.con.execute("DELETE FROM decision_log WHERE competitor_id=?", (src,))
+        self.con.execute("DELETE FROM competitors WHERE id=?", (src,))
+        self.con.execute("COMMIT")
+
+    @locked
+    def delete_empty_albums(self) -> int:
+        """Remove albums with no photo in them (accepted, or a suggestion worth checking). -> how many."""
+        low = float(self.setting("review_threshold"))
+        ids = [r["id"] for r in self.con.execute(
+            "SELECT c.id FROM competitors c WHERE c.kind='competitor' AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.competitor_id=c.id "
+            "AND a.status<>'rejected' AND (a.status='accepted' OR a.p>=?))", (low,))]
+        for i in ids:
+            self.con.execute("DELETE FROM competitors WHERE id=?", (i,))
+        return len(ids)
 
     @locked
     def suggest_roster(self, min_photos=2, min_conf=0.5):
-        """Numbers the OCR/VLM read in several photos but that are not in the roster yet."""
-        counts = {}
-        for ps in self.load_persons().values():
-            seen = set()
+        """Numbers read (by OCR or the AI helper) on several photos that are not albums yet."""
+        per_photo: dict[int, set] = {}
+        for photo_id, ps in self.load_persons().items():
             for p in ps:
                 for n, c in p.numbers.items():
                     if c >= min_conf and n >= int(self.setting("ocr_min_number")):
-                        seen.add(n)
-            for n in seen:
+                        per_photo.setdefault(photo_id, set()).add(n)
+        for r in self.con.execute("SELECT photo_id, number FROM vlm_reads WHERE number IS NOT NULL"):
+            per_photo.setdefault(r["photo_id"], set()).add(r["number"])
+        counts: dict[int, int] = {}
+        for nums in per_photo.values():
+            for n in nums:
                 counts[n] = counts.get(n, 0) + 1
         have = {c["number"] for c in self.competitors()}
         return sorted(({"number": n, "photos": k} for n, k in counts.items() if k >= min_photos and n not in have),
                       key=lambda d: -d["photos"])
 
+    @locked
+    def auto_roster(self, min_photos: int = 2) -> list[int]:
+        """Create albums for numbers the analysis read in at least `min_photos` photos (skipped in 'list' mode)."""
+        if self.setting("roster_mode") != "auto":
+            return []
+        made = [s["number"] for s in self.suggest_roster(min_photos)]
+        for n in made:
+            self.add_competitor(n)
+        return made
+
+    # ------------------------------------------------------------ workflow
+    @locked
+    def workflow(self) -> dict:
+        """Where this event is in the import -> examples -> analyse -> AI -> review path."""
+        q = lambda s, *a: self.con.execute(s, a).fetchone()[0]
+        photos, processed = q("SELECT COUNT(*) FROM photos"), q("SELECT COUNT(*) FROM photos WHERE processed=1")
+        examples = q("SELECT COUNT(*) FROM bib_examples")
+        w = {"photos": photos, "processed": processed, "examples": examples, "has_profile": self.bib_profile() is not None,
+             "examples_skipped": bool(self.get_meta("examples_skipped")), "ai_skipped": bool(self.get_meta("ai_skipped")),
+             "ai_done": q("SELECT COUNT(*) FROM vlm_reads") > 0,
+             "sampled": q("SELECT COUNT(DISTINCT photo_id) FROM persons p JOIN photos ph ON ph.id=p.photo_id WHERE ph.processed=0")}
+        examples_done = w["has_profile"] or w["examples_skipped"] or processed > 0
+        if photos == 0:
+            w["stage"] = "import"
+        elif not examples_done:
+            w["stage"] = "examples"
+        elif processed < photos:
+            w["stage"] = "analyse"
+        elif not (w["ai_done"] or w["ai_skipped"]):
+            w["stage"] = "ai"
+        else:
+            w["stage"] = "review"
+        return w
+
     # ------------------------------------------------------------- persons
     @locked
-    def save_persons(self, photo_id: int, people: list[Person]):
+    def save_persons(self, photo_id: int, people: list[Person], mark_processed: bool = True):
         self.con.execute("BEGIN")
         self.con.execute("DELETE FROM persons WHERE photo_id=?", (photo_id,))
         for idx, p in enumerate(people):
@@ -190,7 +296,8 @@ class Project:
                 (photo_id, idx, db.arr(p.box), db.arr(p.kpts), db.jdump({str(k): v for k, v in p.numbers.items()}),
                  db.jdump([(n, c, list(r)) for n, c, r in p.bibs]), db.arr(p.colour), db.arr(p.face),
                  db.arr(p.face_arc), p.face_score))
-        self.con.execute("UPDATE photos SET processed=1 WHERE id=?", (photo_id,))
+        if mark_processed:
+            self.con.execute("UPDATE photos SET processed=1 WHERE id=?", (photo_id,))
         self.con.execute("COMMIT")
         self._persons_cache = None
 
@@ -244,6 +351,34 @@ class Project:
     @locked
     def clear_bib_examples(self):
         self.con.execute("DELETE FROM bib_examples")
+
+    # ----------------------------------------------------------- sampling
+    @locked
+    def sample_photo_ids(self, n: int = 12) -> list[int]:
+        """Photos spread evenly over the shooting order: a quick look at the whole event."""
+        ids = [r["id"] for r in self.con.execute("SELECT id FROM photos ORDER BY taken, name")]
+        if len(ids) <= n:
+            return ids
+        step = len(ids) / n
+        return [ids[int(i * step + step / 2)] for i in range(n)]
+
+    def prepare_samples(self, pose, n: int = 12, progress=None, stop=lambda: False) -> int:
+        """Find the people in a handful of photos so the user can show where the number is BEFORE the full analysis.
+        These photos are not marked as analysed; the real analysis redoes them."""
+        with self.lock:
+            have = set(self.load_persons())
+            todo = [(i, p) for i in self.sample_photo_ids(n) if i not in have and (p := self.photo_path(i))]
+        done = 0
+        for k, (pid, path) in enumerate(todo):
+            if stop():
+                break
+            img = cv2.imread(path, cv2.IMREAD_COLOR)
+            if img is not None:
+                self.save_persons(pid, pose.detect(img), mark_processed=False)
+                done += 1
+            if progress:
+                progress(k + 1, len(todo), Path(path).name)
+        return done
 
     # ----------------------------------------------------------- extraction
     def extract(self, extractor, progress=None, stop=lambda: False, only_new=True) -> int:
@@ -300,7 +435,7 @@ class Project:
                 continue
             for p in people[pid]:
                 p.numbers, p.bibs = bib_reader.read(img, p, profile)
-            self.save_persons(pid, people[pid])
+            self.save_persons(pid, people[pid], mark_processed=False)
             if progress:
                 progress(i + 1, len(ids), Path(paths[pid]).name)
         return len(ids)
@@ -322,6 +457,7 @@ class Project:
                 extra.setdefault((pindex[r["photo_id"]], r["person_idx"]), {})[r["number"]] = max(r["confidence"] or 0, scoring.VLM_CONF)
         inp = scoring.ScoreInput(persons=[persons.get(p["id"], []) for p in photos],
                                  times=np.array([p["taken"] or 0.0 for p in photos]), roster=[c["number"] for c in comps],
+                                 variants=[c["variant"] for c in comps],
                                  seeds=seeds, extra_numbers=extra, ocr_min_number=int(self.setting("ocr_min_number")))
         return inp, photos, comps
 

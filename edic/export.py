@@ -12,9 +12,12 @@ from .review import Review
 _BAD = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
-def folder_name(template: str, number: int, name: str) -> str:
+def folder_name(template: str, number: int, name: str, variant: int = 1, kind: str = "competitor") -> str:
+    if kind == "others":
+        return "Others"
     label = template.format(number=number, name=name.strip()).strip(" .-_")
-    return _BAD.sub("_", label) or f"{number:03d}"
+    label = _BAD.sub("_", label) or f"{number:03d}"
+    return label + (f"_{variant}" if variant > 1 else "")
 
 
 def _place(src: Path, dst: Path, mode: str):
@@ -35,13 +38,13 @@ def plan(project, assign_mode: str | None = None, template: str | None = None, i
     """What would be written: {folder: [(photo name, source path, how)]} - no files are touched."""
     review = Review(project)
     template = template or project.setting("folder_template")
-    comps = {c["id"]: c for c in project.competitors()}
+    comps = {c["id"]: c for c in project.competitors(include_others=True)}
     photos = {p["id"]: p for p in project.photos()}
     folders: dict[str, list] = {}
     placed = set()
     for photo_id, comp_id, how in review.effective(assign_mode):
         c = comps[comp_id]
-        folders.setdefault(folder_name(template, c["number"], c["name"]), []).append((photos[photo_id], how))
+        folders.setdefault(folder_name(template, c["number"], c["name"], c["variant"], c["kind"]), []).append((photos[photo_id], how))
         placed.add(photo_id)
     if include_unsorted:
         rest = [p for pid, p in photos.items() if pid not in placed and p["processed"]]

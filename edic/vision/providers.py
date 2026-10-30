@@ -9,17 +9,32 @@ log = logging.getLogger("edic")
 PREFERRED = ["CUDAExecutionProvider", "DmlExecutionProvider", "CoreMLExecutionProvider", "CPUExecutionProvider"]
 
 
-def providers(force_cpu: bool = False) -> list[str]:
-    if force_cpu:
-        return ["CPUExecutionProvider"]
+CPU = "CPUExecutionProvider"
+PREFERENCE = "auto"                       # auto | cpu | gpu (the Settings choice)
+
+
+def set_preference(pref: str):
+    global PREFERENCE
+    PREFERENCE = pref if pref in ("auto", "cpu", "gpu") else "auto"
+
+
+def gpu_providers() -> list[str]:
     have = ort.get_available_providers()
-    chosen = [p for p in PREFERRED if p in have]
-    return chosen or ["CPUExecutionProvider"]
+    return [p for p in PREFERRED if p in have and p != CPU]
+
+
+def providers(force_cpu: bool = False) -> list[str]:
+    """auto and gpu use a graphics provider when there is one (and fall back to the CPU); cpu never does."""
+    if force_cpu or PREFERENCE == "cpu":
+        return [CPU]
+    return gpu_providers() + [CPU]
 
 
 def describe() -> dict:
     p = providers()
-    return {"providers": p, "accelerated": p[0] != "CPUExecutionProvider", "device": p[0].replace("ExecutionProvider", "")}
+    gpus = gpu_providers()
+    return {"providers": p, "accelerated": p[0] != CPU, "device": p[0].replace("ExecutionProvider", ""),
+            "gpu_available": bool(gpus), "gpu_providers": [g.replace("ExecutionProvider", "") for g in gpus], "preference": PREFERENCE}
 
 
 def session(path, force_cpu: bool = False) -> ort.InferenceSession:

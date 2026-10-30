@@ -19,8 +19,10 @@ CREATE TABLE IF NOT EXISTS persons (
     colour BLOB, face BLOB, face_arc BLOB, face_score REAL,
     UNIQUE(photo_id, idx)
 );
-CREATE TABLE IF NOT EXISTS competitors (
-    id INTEGER PRIMARY KEY, number INTEGER UNIQUE NOT NULL, name TEXT NOT NULL DEFAULT ''
+CREATE TABLE IF NOT EXISTS competitors (          -- an "album": one competitor, or the special Others album
+    id INTEGER PRIMARY KEY, number INTEGER NOT NULL, variant INTEGER NOT NULL DEFAULT 1,
+    name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'competitor',     -- competitor | others
+    UNIQUE(number, variant)
 );
 CREATE TABLE IF NOT EXISTS assignments (
     photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
@@ -37,7 +39,7 @@ CREATE INDEX IF NOT EXISTS assign_comp ON assignments(competitor_id, status);
 CREATE TABLE IF NOT EXISTS decision_log (
     id INTEGER PRIMARY KEY, at REAL NOT NULL, photo_id INTEGER NOT NULL, competitor_id INTEGER NOT NULL,
     action TEXT NOT NULL, existed INTEGER NOT NULL, prev_status TEXT, prev_source TEXT, prev_person INTEGER,
-    prev_p REAL, prev_num_conf REAL, undone INTEGER NOT NULL DEFAULT 0
+    prev_p REAL, prev_num_conf REAL, undone INTEGER NOT NULL DEFAULT 0, grp INTEGER
 );
 CREATE TABLE IF NOT EXISTS bib_examples (
     id INTEGER PRIMARY KEY, photo_id INTEGER NOT NULL, person_idx INTEGER NOT NULL,
@@ -59,6 +61,19 @@ def connect(path: Path) -> sqlite3.Connection:
     cols = {r["name"] for r in con.execute("PRAGMA table_info(assignments)")}
     if "evidence" not in cols:                    # projects created before evidence was stored
         con.execute("ALTER TABLE assignments ADD COLUMN evidence TEXT")
+    if "grp" not in {r["name"] for r in con.execute("PRAGMA table_info(decision_log)")}:     # one user action can change several rows
+        con.execute("ALTER TABLE decision_log ADD COLUMN grp INTEGER")
+    ccols = {r["name"] for r in con.execute("PRAGMA table_info(competitors)")}
+    if "variant" not in ccols:                    # projects from before albums had variants (56, 56_2) and an Others album
+        con.execute("PRAGMA foreign_keys=OFF")
+        con.execute("BEGIN")
+        con.execute("""CREATE TABLE competitors_new (id INTEGER PRIMARY KEY, number INTEGER NOT NULL, variant INTEGER NOT NULL DEFAULT 1,
+                       name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'competitor', UNIQUE(number, variant))""")
+        con.execute("INSERT INTO competitors_new(id,number,name) SELECT id,number,name FROM competitors")
+        con.execute("DROP TABLE competitors")
+        con.execute("ALTER TABLE competitors_new RENAME TO competitors")
+        con.execute("COMMIT")
+        con.execute("PRAGMA foreign_keys=ON")
     return con
 
 

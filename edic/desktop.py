@@ -57,6 +57,17 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+class Bridge:
+    """What the page may ask of the native window (pywebview exposes the public methods as window.pywebview.api.*)."""
+    window = None
+
+    def pick_folder(self, title: str = "") -> str | None:
+        import webview
+        kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
+        got = self.window.create_file_dialog(kind)
+        return str(got[0]) if got else None
+
+
 def open_window(url: str) -> bool:
     """Native window via pywebview. Returns False when it cannot be used (missing runtime etc.)."""
     try:
@@ -65,7 +76,8 @@ def open_window(url: str) -> bool:
         print(f"native window unavailable ({e}); using the browser", file=sys.stderr)
         return False
     try:
-        webview.create_window("3EDIČ", url, width=1440, height=920, min_size=(1000, 700), background_color="#060607")
+        bridge = Bridge()
+        bridge.window = webview.create_window("3EDIČ", url, width=1440, height=920, min_size=(1000, 700), background_color="#060607", js_api=bridge)
         webview.start()
         return True
     except Exception as e:                                   # noqa: BLE001
@@ -96,6 +108,8 @@ def smoke(with_models: bool) -> int:
         check("model registry bundled", {m["id"] for m in sysinfo["models"]} >= {"pose", "yunet", "sface", "arcface"})
         folder = json.loads(op.open(srv.url + "api/fs?path=" + urllib.request.quote(tmp)).read())
         check("folder picker", folder["path"])
+        status = json.loads(op.open(srv.url + "api/status").read())
+        check("status", status["active"] == [] and status["device"], status["device"])
     finally:
         srv.stop()
 

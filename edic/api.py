@@ -68,6 +68,28 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
                 "vlm_keys": {k: engine.has_api_key(k) for k in vlm_providers.PROVIDERS},
                 "vlm_default_models": vlm_providers.DEFAULT_MODELS}
 
+    @app.get("/api/status", **api)
+    def status():
+        return engine.status()
+
+    @app.get("/api/data-dir", **api)
+    def data_dir():
+        return engine.data_dir_info()
+
+    @app.post("/api/data-dir", **api)
+    def data_dir_move(body: dict = Body(...)):
+        if engine.jobs.active():
+            raise HTTPException(409, "wait until the running tasks have finished")
+        try:
+            return engine.move_data_job(body.get("path", ""), bool(body.get("move", True))).to_dict()
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/restart", **api)
+    def restart():
+        engine.restart_app()
+        return {"ok": True}
+
     @app.put("/api/settings", **api)
     def put_settings(changes: dict = Body(...)):
         try:
@@ -166,6 +188,17 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
         return {"path": str(p), "parent": str(p.parent) if p.parent != p else None, "images": images, "drives": drives,
                 "dirs": [{"name": d.name, "path": str(d)} for d in dirs[:500]]}
 
+    @app.post("/api/resolve-folder", **api)
+    def resolve_folder(body: dict = Body(...)):
+        """A path from a drop or a native dialog -> the folder it means (a dropped file means its folder)."""
+        p = Path(body.get("path", "")).expanduser()
+        if p.is_file():
+            p = p.parent
+        if not p.is_dir():
+            raise HTTPException(400, "that is not a folder")
+        images = sum(1 for f in p.rglob("*") if f.suffix.lower() in IMG_EXT and not f.name.startswith("."))
+        return {"path": str(p), "name": p.name, "images": images}
+
     # ------------------------------------------------------------- projects
     @app.get("/api/projects", **api)
     def projects():
@@ -174,7 +207,7 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
     @app.post("/api/projects", **api)
     def create_project(body: dict = Body(...)):
         try:
-            p = engine.create_project(body.get("name", ""), body.get("photos_dir", ""))
+            p = engine.create_project(body.get("name", ""), body.get("photos_dir", ""), body.get("roster_mode", "auto"))
         except ValueError as e:
             raise HTTPException(400, str(e))
         return p.summary()
@@ -182,7 +215,32 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
     @app.get("/api/projects/{pid}", **api)
     def project(pid: str):
         p = proj(pid)
-        return {**p.summary(), "settings": p.settings(), "stats": Review(p).stats(), "profile": (p.bib_profile().to_dict() if p.bib_profile() else None)}
+        return {**p.summary(), "settings": p.settings(), "stats": Review(p).stats(), "workflow": p.workflow(),
+                "profile": (p.bib_profile().to_dict() if p.bib_profile() else None)}
+
+    @app.get("/api/projects/{pid}/workflow", **api)
+    def workflow(pid: str):
+        return proj(pid).workflow()
+
+    @app.post("/api/projects/{pid}/workflow/skip", **api)
+    def workflow_skip(pid: str, body: dict = Body(...)):
+        """'Skip this step': number examples or the AI helper."""
+        step = body.get("step")
+        if step not in ("examples", "ai"):
+            raise HTTPException(400, "step must be examples or ai")
+        p = proj(pid)
+        p.set_meta(step + "_skipped", bool(body.get("skipped", True)))
+        return p.workflow()
+
+    @app.post("/api/projects/{pid}/ingest", **api)
+    def ingest(pid: str):
+        proj(pid)
+        return engine.ingest_job(pid).to_dict()
+
+    @app.post("/api/projects/{pid}/prepare", **api)
+    def prepare(pid: str):
+        proj(pid)
+        return engine.prepare_job(pid).to_dict()
 
     @app.delete("/api/projects/{pid}", **api)
     def delete_project(pid: str):
@@ -311,10 +369,52 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
         return {"added": added}
 
     @app.put("/api/projects/{pid}/competitors/{cid}", **api)
-    def rename_competitor(pid: str, cid: int, body: dict = Body(...)):
-        p = proj(pid)
-        with p.lock:
-            p.con.execute("UPDATE competitors SET name=? WHERE id=?", (body.get("name", ""), cid))
+    def update_competitor(pid: str, cid: int, body: dict = Body(...)):
+        """Rename and/or renumber an album. number onto an existing album: merge=true joins them, otherwise it becomes 56_2."""
+        number = body.get("number")
+        try:
+            number = int(number) if number not in (None, "") else None
+        except (TypeError, ValueError):
+            raise HTTPException(400, "number must be a number")
+        if number is not None and not 1 <= number <= 9999:
+            raise HTTPException(400, "number out of range")
+        try:
+            return proj(pid).update_album(cid, number, body.get("name"), bool(body.get("merge")))
+        except KeyError:
+            raise HTTPException(404, "no such album")
+
+    @app.post("/api/projects/{pid}/competitors/{cid}/merge", **api)
+    def merge_competitor(pid: str, cid: int, body: dict = Body(...)):
+        (dst,) = need(body, "into")
+        if dst == cid:
+            raise HTTPException(400, "choose another album")
+        proj(pid).merge_albums(cid, dst)
+        return {"ok": True}
+
+    @app.post("/api/projects/{pid}/competitors/{cid}/split", **api)
+    def split_competitor(pid: str, cid: int, body: dict = Body(...)):
+        """Some photos in this album are another competitor with the same number: they go to 56_2."""
+        ids = int_list(body, "photo_ids")
+        if not ids:
+            raise HTTPException(400, "photo_ids is required")
+        try:
+            return {"id": rv(pid).split_variant(cid, ids)}
+        except KeyError:
+            raise HTTPException(404, "no such album")
+
+    @app.post("/api/projects/{pid}/competitors/{cid}/remove-photos", **api)
+    def remove_photos(pid: str, cid: int, body: dict = Body(...)):
+        """Take photos out of an album. destination: {type: unknown} (tag them manually) | {type: others} | {type: album, number}"""
+        dest = body.get("destination") or {}
+        if dest.get("type") not in ("unknown", "others", "album"):
+            raise HTTPException(400, "destination.type must be unknown, others or album")
+        try:
+            if dest["type"] == "album":
+                dest["number"] = int(dest["number"])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, "destination.number is required")
+        items = [{"photo_id": int(i)} for i in int_list(body, "photo_ids")]
+        rv(pid).move_photos(items, cid, dest)
         return {"ok": True}
 
     @app.delete("/api/projects/{pid}/competitors/{cid}", **api)
@@ -323,6 +423,10 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
         with p.lock:
             p.con.execute("DELETE FROM competitors WHERE id=?", (cid,))
         return {"ok": True}
+
+    @app.delete("/api/projects/{pid}/albums/empty", **api)
+    def delete_empty(pid: str):
+        return {"deleted": proj(pid).delete_empty_albums()}
 
     @app.get("/api/projects/{pid}/roster/suggest", **api)
     def roster_suggest(pid: str):
@@ -398,6 +502,18 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
     def r_tags(pid: str, limit: int = 12):
         return rv(pid).tags(limit)
 
+    @app.get("/api/projects/{pid}/review/queue", **api)
+    def r_queue(pid: str, kind: str = "both", limit: int = 2000):
+        """Photos that still need a person, in shooting order."""
+        if kind not in ("both", "unknown", "check"):
+            raise HTTPException(400, "kind must be both, unknown or check")
+        return rv(pid).queue(kind, limit)
+
+    @app.get("/api/projects/{pid}/review/context/{photo_id}", **api)
+    def r_context(pid: str, photo_id: int, before: int | None = None, after: int | None = None):
+        n = engine.settings()["context_frames"]
+        return rv(pid).context(photo_id, min(12, before if before is not None else n), min(12, after if after is not None else n))
+
     @app.get("/api/projects/{pid}/review/album", **api)
     def r_album(pid: str):
         return rv(pid).album()
@@ -464,6 +580,51 @@ def create_app(engine: Engine | None = None, token: str | None = None) -> FastAP
     def r_nobody(pid: str, body: dict = Body(...)):
         (photo_id,) = need(body, "photo_id")
         rv(pid).nobody(photo_id)
+        return {"ok": True}
+
+    @app.post("/api/projects/{pid}/review/person", **api)
+    def r_person(pid: str, body: dict = Body(...)):
+        """Tag ONE person on a photo with a number (creating the album if needed). The photo stays on screen for the next person."""
+        photo_id, person_idx = need(body, "photo_id", "person_idx")
+        p = proj(pid)
+        if body.get("others"):
+            comp_id = p.others_album()
+        else:
+            (number,) = need(body, "number")
+            if not 1 <= number <= 9999:
+                raise HTTPException(400, "number out of range")
+            comp_id = int(body["competitor_id"]) if body.get("competitor_id") else p.add_competitor(number)
+        rv(pid).set_person(photo_id, person_idx, comp_id)
+        return {"ok": True, "competitor_id": comp_id}
+
+    @app.post("/api/projects/{pid}/review/person/reject", **api)
+    def r_person_reject(pid: str, body: dict = Body(...)):
+        photo_id, person_idx = need(body, "photo_id", "person_idx")
+        rv(pid).reject_person(photo_id, person_idx)
+        return {"ok": True}
+
+    @app.post("/api/projects/{pid}/review/bulk-tag", **api)
+    def r_bulk_tag(pid: str, body: dict = Body(...)):
+        """Many thumbnails -> one number (created if new) or Others."""
+        p = proj(pid)
+        items = [{"photo_id": int(i)} for i in int_list(body, "photo_ids")]
+        if not items:
+            raise HTTPException(400, "photo_ids is required")
+        if body.get("others"):
+            comp_id = p.others_album()
+        else:
+            (number,) = need(body, "number")
+            if not 1 <= number <= 9999:
+                raise HTTPException(400, "number out of range")
+            comp_id = p.add_competitor(number)
+        rv(pid).bulk_tag(items, comp_id)
+        return {"ok": True, "competitor_id": comp_id, "count": len(items)}
+
+    @app.post("/api/projects/{pid}/review/bulk-unknown", **api)
+    def r_bulk_unknown(pid: str, body: dict = Body(...)):
+        """'These do not match this competitor': they go back to the tagging queue."""
+        (comp_id,) = need(body, "competitor_id")
+        rv(pid).bulk_to_unknown([{"photo_id": int(i)} for i in int_list(body, "photo_ids")], comp_id)
         return {"ok": True}
 
     @app.post("/api/projects/{pid}/review/undo", **api)

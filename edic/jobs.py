@@ -33,7 +33,7 @@ class Job:
         eta = (elapsed / self.done) * (self.total - self.done) if self.done and self.total and self.state == "running" else None
         return {"id": self.id, "kind": self.kind, "label": self.label, "state": self.state, "done": self.done,
                 "total": self.total, "message": self.message, "error": self.error, "result": self.result,
-                "elapsed": elapsed, "eta": eta}
+                "elapsed": elapsed, "eta": eta, "finished": self.finished}
 
 
 class Jobs:

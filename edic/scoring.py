@@ -50,6 +50,7 @@ class ScoreInput:
     seeds: list[Seed] = field(default_factory=list)
     extra_numbers: dict = field(default_factory=dict)   # (photo, person) -> {number: conf} from the VLM
     ocr_min_number: int = 10                    # single digits from OCR are mostly fragments
+    variants: list[int] | None = None           # 1 = the album a read number points to; 2, 3... (56_2) are tagged by hand
 
 
 @dataclass
@@ -106,7 +107,8 @@ def _margin(M):
 
 def features(inp: ScoreInput, mods: tuple, clean_by: str):
     n, m = len(inp.persons), len(inp.roster)
-    comp_index = {c: k for k, c in enumerate(inp.roster)}
+    variants = inp.variants or [1] * len(inp.roster)
+    comp_index = {c: k for k, (c, v) in enumerate(zip(inp.roster, variants)) if v == 1}
     f_num = np.zeros((n, m))
     gal = {k: [[] for _ in range(m)] for k in mods}
     for i, c, j, conf in _anchors(inp, comp_index):
